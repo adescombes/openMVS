@@ -53,7 +53,7 @@ bool ObjModel::MaterialLib::Save(const String& prefix, bool texLossless) const
 		return false;
 
 	const String pathName(Util::getFilePath(prefix));
-	const String name(Util::getFileNameExt(prefix));
+	const String name(Util::getFileFullName(prefix));
 	#ifdef OBJ_USE_OPENMP
 	bool bSuccess(true);
 	#pragma omp parallel for
@@ -124,8 +124,8 @@ bool ObjModel::Save(const String& fileName, unsigned precision, bool texLossless
 {
 	if (vertices.empty())
 		return false;
-	const String prefix(Util::getFileFullName(fileName));
-	const String name(Util::getFileNameExt(prefix));
+	const String prefix(Util::getFullFileName(fileName));
+	const String name(Util::getFileFullName(prefix));
 
 	if (!material_lib.Save(prefix, texLossless))
 		return false;
@@ -160,17 +160,12 @@ bool ObjModel::Save(const String& fileName, unsigned precision, bool texLossless
 	for (size_t i = 0; i < groups.size(); ++i) {
 		out << "usemtl " << groups[i].material_name << "\n";
 		for (size_t j = 0; j < groups[i].faces.size(); ++j) {
-			const Face& face =  groups[i].faces[j];
+			Face const & face =  groups[i].faces[j];
 			out << "f";
 			for (size_t k = 0; k < 3; ++k) {
-				out << " " << face.vertices[k]  + OBJ_INDEX_OFFSET;
-				if (!texcoords.empty()) {
-					out << "/" << face.texcoords[k]  + OBJ_INDEX_OFFSET;
-					if (!normals.empty())
-						out << "/" << face.normals[k]  + OBJ_INDEX_OFFSET;
-				} else
-				if (!normals.empty())
-					out << "//" << face.normals[k]  + OBJ_INDEX_OFFSET;
+				out << " " << face.vertices[k]  + OBJ_INDEX_OFFSET
+					<< "/" << face.texcoords[k]  + OBJ_INDEX_OFFSET
+					<< "/" << face.normals[k]  + OBJ_INDEX_OFFSET;
 			}
 			out << "\n";
 		}
@@ -186,7 +181,7 @@ bool ObjModel::Load(const String& fileName)
 	std::istringstream in;
 	while (fin.good()) {
 		std::getline(fin, line);
-		if (line.empty() || line[0u] == '#')
+		if (line.empty() || line[0] == '#')
 			continue;
 		in.str(line);
 		in >> keyword;
@@ -238,8 +233,6 @@ bool ObjModel::Load(const String& fileName)
 			}
 			if (in.fail())
 				return false;
-			if (groups.empty())
-				AddGroup("");
 			groups.back().faces.push_back(f);
 		} else
 		if (keyword == "mtllib") {

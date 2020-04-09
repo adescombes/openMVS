@@ -77,9 +77,6 @@ public:
 	// returns the focal length aspect ratio
 	inline REAL GetFocalLengthRatio() const { return (K(1,1) / K(0,0)); }
 
-	// returns the principal-point
-	inline Point2 GetPrincipalPoint() const { return Point2(K(0,2), K(1,2)); }
-
 	// update camera parameters given the delta
 	inline void UpdateTranslation(const Point3& delta) {
 		C += delta;
@@ -232,10 +229,6 @@ public:
 	REAL DistanceSq(const Point3& X) const; // compute the distance from the camera to the given 3D point
 	inline REAL Distance(const Point3& X) const { return SQRT(DistanceSq(X)); }
 
-	static REAL StereoRectify(const cv::Size& size1, const Camera& camera1, const cv::Size& size2, const Camera& camera2, Matrix3x3& R1, Matrix3x3& R2, Matrix3x3& K1, Matrix3x3& K2);
-	static REAL StereoRectifyFusiello(const cv::Size& size1, const Camera& camera1, const cv::Size& size2, const Camera& camera2, Matrix3x3& R1, Matrix3x3& R2, Matrix3x3& K1, Matrix3x3& K2);
-	static void SetStereoRectificationROI(const Point3fArr& points1, cv::Size& size1, const Camera& camera1, const Point3fArr& points2, cv::Size& size2, const Camera& camera2, const Matrix3x3& R1, const Matrix3x3& R2, Matrix3x3& K1, Matrix3x3& K2);
-
 	// project 3D point by the camera
 	template <typename TYPE>
 	inline TPoint3<TYPE> ProjectPointRT3(const TPoint3<TYPE>& X) const {
@@ -341,11 +334,6 @@ public:
 	inline TPoint2<TYPE> TransformPointW2I(const TPoint3<TYPE>& X) const {
 		return TransformPointC2I(TransformPointW2C(X));
 	}
-	template <typename TYPE>
-	inline TPoint3<TYPE> TransformPointW2I3(const TPoint3<TYPE>& X) const {
-		const TPoint3<TYPE> camX(TransformPointW2C(X));
-		return TPoint3<TYPE>(TransformPointC2I(camX), camX.z);
-	}
 
 	// check if the given point (or its projection) is inside the camera view
 	template <typename TYPE>
@@ -359,27 +347,6 @@ public:
 	template <typename TYPE>
 	inline bool IsInsideProjectionP(const TPoint3<TYPE>& X, const TPoint2<TYPE>& size) const {
 		return IsInside(ProjectPointP(X), size);
-	}
-
-	// same as above, but for ortho-projection
-	template <typename TYPE>
-	inline TPoint3<TYPE> TransformPointOrthoI2C(const TPoint3<TYPE>& x) const {
-		return TPoint3<TYPE>(
-			TYPE((x.x-K(0,2))/K(0,0)),
-			TYPE((x.y-K(1,2))/K(1,1)),
-			x.z );
-	}
-	template <typename TYPE>
-	inline TPoint3<TYPE> TransformPointOrthoI2W(const TPoint3<TYPE>& x) const {
-		return TransformPointC2W(TransformPointOrthoI2C(x));
-	}
-	template <typename TYPE>
-	inline TPoint2<TYPE> TransformPointOrthoC2I(const TPoint3<TYPE>& X) const {
-		return TransformPointC2I(TPoint2<TYPE>(X.x, X.y));
-	}
-	template <typename TYPE>
-	inline TPoint2<TYPE> TransformPointOrthoW2I(const TPoint3<TYPE>& X) const {
-		return TransformPointOrthoC2I(TransformPointW2C(X));
 	}
 
 	#ifdef _USE_BOOST

@@ -5,9 +5,13 @@ else()
 endif()
 FILE(GLOB LIBRARY_FILES_H "*.h" "*.inl")
 
-cxx_executable_with_flags_no_pch(InterfaceCOLMAP "Apps" "${cxx_default}" "MVS;${OpenMVS_EXTRA_LIBS}" ${LIBRARY_FILES_C} ${LIBRARY_FILES_H})
+cxx_executable_with_flags_no_pch(ReadMVS "Apps" "${cxx_default}" "MVS" ${LIBRARY_FILES_C} ${LIBRARY_FILES_H})
+
+if(OpenMVS_USE_BREAKPAD AND BREAKPAD_FOUND)
+	target_link_libraries(ReadMVS ${BREAKPAD_LIBS})
+endif()
 
 # Install
-INSTALL(TARGETS InterfaceCOLMAP
+INSTALL(TARGETS ReadMVS
 	EXPORT OpenMVSTargets
 	RUNTIME DESTINATION "${INSTALL_BIN_DIR}" COMPONENT bin)

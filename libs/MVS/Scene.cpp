@@ -34,6 +34,13 @@
 #define _USE_OPENCV
 #include "Interface.h"
 
+#include <iostream>
+#include <fstream>
+#include <algorithm>
+#include <typeinfo> 
+
+using namespace std;
+
 using namespace MVS;
 
 
@@ -53,11 +60,6 @@ void Scene::Release()
 	mesh.Release();
 }
 
-bool Scene::IsEmpty() const
-{
-	return pointcloud.IsEmpty() && mesh.IsEmpty();
-}
-
 
 bool Scene::LoadInterface(const String & fileName)
 {
@@ -71,34 +73,25 @@ bool Scene::LoadInterface(const String & fileName)
 	// import platforms and cameras
 	ASSERT(!obj.platforms.empty());
 	platforms.Reserve((uint32_t)obj.platforms.size());
-	for (const Interface::Platform& itPlatform: obj.platforms) {
+	for (Interface::PlatformArr::const_iterator itPlatform=obj.platforms.begin(); itPlatform!=obj.platforms.end(); ++itPlatform) {
 		Platform& platform = platforms.AddEmpty();
-		platform.name = itPlatform.name;
-		platform.cameras.Reserve((uint32_t)itPlatform.cameras.size());
-		for (const Interface::Platform::Camera& itCamera: itPlatform.cameras) {
+		platform.name = itPlatform->name;
+		platform.cameras.Reserve((uint32_t)itPlatform->cameras.size());
+		for (Interface::Platform::CameraArr::const_iterator itCamera=itPlatform->cameras.begin(); itCamera!=itPlatform->cameras.end(); ++itCamera) {
 			Platform::Camera& camera = platform.cameras.AddEmpty();
-			camera.K = itCamera.K;
-			camera.R = itCamera.R;
-			camera.C = itCamera.C;
-			if (!itCamera.IsNormalized()) {
-				// normalize K
-				ASSERT(itCamera.HasResolution());
-				const REAL scale(REAL(1)/camera.GetNormalizationScale(itCamera.width,itCamera.height));
-				camera.K(0,0) *= scale;
-				camera.K(1,1) *= scale;
-				camera.K(0,2) *= scale;
-				camera.K(1,2) *= scale;
-			}
-			DEBUG_EXTRA("Camera model loaded: platform %u; camera %2u; f %.3fx%.3f; poses %u", platforms.size()-1, platform.cameras.size()-1, camera.K(0,0), camera.K(1,1), itPlatform.poses.size());
+			camera.K = itCamera->K;
+			camera.R = itCamera->R;
+			camera.C = itCamera->C;
+			DEBUG_EXTRA("Camera model loaded: platform %u; camera %2u; f %.3fx%.3f; poses %u", platforms.GetSize()-1, platform.cameras.GetSize()-1, camera.K(0,0), camera.K(1,1), itPlatform->poses.size());
 		}
-		ASSERT(platform.cameras.GetSize() == itPlatform.cameras.size());
-		platform.poses.Reserve((uint32_t)itPlatform.poses.size());
-		for (const Interface::Platform::Pose& itPose: itPlatform.poses) {
+		ASSERT(platform.cameras.GetSize() == itPlatform->cameras.size());
+		platform.poses.Reserve((uint32_t)itPlatform->poses.size());
+		for (Interface::Platform::PoseArr::const_iterator itPose=itPlatform->poses.begin(); itPose!=itPlatform->poses.end(); ++itPose) {
 			Platform::Pose& pose = platform.poses.AddEmpty();
-			pose.R = itPose.R;
-			pose.C = itPose.C;
+			pose.R = itPose->R;
+			pose.C = itPose->C;
 		}
-		ASSERT(platform.poses.GetSize() == itPlatform.poses.size());
+		ASSERT(platform.poses.GetSize() == itPlatform->poses.size());
 	}
 	ASSERT(platforms.GetSize() == obj.platforms.size());
 	if (platforms.IsEmpty())
@@ -109,8 +102,9 @@ bool Scene::LoadInterface(const String & fileName)
 	size_t nTotalPixels(0);
 	ASSERT(!obj.images.empty());
 	images.Reserve((uint32_t)obj.images.size());
-	for (const Interface::Image& image: obj.images) {
-		const uint32_t ID(images.size());
+	for (Interface::ImageArr::const_iterator it=obj.images.begin(); it!=obj.images.end(); ++it) {
+		const Interface::Image& image = *it;
+		const uint32_t ID(images.GetSize());
 		Image& imageData = images.AddEmpty();
 		imageData.name = image.name;
 		Util::ensureUnifySlash(imageData.name);
@@ -122,23 +116,18 @@ bool Scene::LoadInterface(const String & fileName)
 		}
 		imageData.platformID = image.platformID;
 		imageData.cameraID = image.cameraID;
-		imageData.ID = (image.ID == NO_ID ? ID : image.ID);
-		// init camera
-		const Interface::Platform::Camera& camera = obj.platforms[image.platformID].cameras[image.cameraID];
-		if (camera.HasResolution()) {
-			// use stored resolution
-			imageData.width = camera.width;
-			imageData.height = camera.height;
-			imageData.scale = 1;
-		} else {
-			// read image header for resolution
-			if (!imageData.ReloadImage(0, false))
-				return false;
-		}
+		#if 1
+		// load image
+		if (!imageData.ReloadImage(0, false))
+			return false;
 		imageData.UpdateCamera(platforms);
+		#else
+		imageData.camera = platforms[imageData.platformID].GetCamera(imageData.cameraID, imageData.poseID);
+		imageData.camera.ComposeP();
+		#endif
 		++nCalibratedImages;
 		nTotalPixels += imageData.width * imageData.height;
-		DEBUG_EXTRA("Image loaded %3u: %s", ID, Util::getFileNameExt(imageData.name).c_str());
+		DEBUG_EXTRA("Image loaded %3u: %s", ID, Util::getFileFullName(imageData.name).c_str());
 	}
 	if (images.GetSize() < 2)
 		return false;
@@ -189,20 +178,23 @@ bool Scene::LoadInterface(const String & fileName)
 				TD_TIMER_GET_FMT().c_str(),
 				images.GetSize(), nCalibratedImages, (double)nTotalPixels/(1024.0*1024.0), (double)nTotalPixels/(1024.0*1024.0*nCalibratedImages),
 				pointcloud.points.GetSize(), mesh.vertices.GetSize(), mesh.faces.GetSize());
-	return true;
+    
+
+    return true;
 } // LoadInterface
 
-bool Scene::SaveInterface(const String & fileName, int version) const
+bool Scene::SaveInterface(const String & fileName) const
 {
 	TD_TIMER_STARTD();
 	Interface obj;
-
 	// export platforms
 	obj.platforms.reserve(platforms.GetSize());
-	for (const Platform& platform: platforms) {
+	FOREACH(i, platforms) {
+		const Platform& platform = platforms[i];
 		Interface::Platform plat;
 		plat.cameras.reserve(platform.cameras.GetSize());
-		for (const Platform::Camera& camera: platform.cameras) {
+		FOREACH(j, platform.cameras) {
+			const Platform::Camera& camera = platform.cameras[j];
 			Interface::Platform::Camera cam;
 			cam.K = camera.K;
 			cam.R = camera.R;
@@ -210,7 +202,8 @@ bool Scene::SaveInterface(const String & fileName, int version) const
 			plat.cameras.push_back(cam);
 		}
 		plat.poses.reserve(platform.poses.GetSize());
-		for (const Platform::Pose& pose: platform.poses) {
+		FOREACH(j, platform.poses) {
+			const Platform::Pose& pose = platform.poses[j];
 			Interface::Platform::Pose p;
 			p.R = pose.R;
 			p.C = pose.C;
@@ -218,7 +211,6 @@ bool Scene::SaveInterface(const String & fileName, int version) const
 		}
 		obj.platforms.push_back(plat);
 	}
-
 	// export images
 	obj.images.resize(images.GetSize());
 	FOREACH(i, images) {
@@ -226,22 +218,20 @@ bool Scene::SaveInterface(const String & fileName, int version) const
 		MVS::Interface::Image& image = obj.images[i];
 		image.name = MAKE_PATH_REL(WORKING_FOLDER_FULL, imageData.name);
 		image.poseID = imageData.poseID;
-		image.platformID = imageData.platformID;
+		image.platformID = imageData.platformID; 
 		image.cameraID = imageData.cameraID;
-		image.ID = imageData.ID;
 	}
-
 	// export 3D points
 	obj.vertices.resize(pointcloud.points.GetSize());
 	FOREACH(i, pointcloud.points) {
-		const PointCloud::Point& point = pointcloud.points[i];
-		const PointCloud::ViewArr& views = pointcloud.pointViews[i];
+		const PointCloud::Point& point = pointcloud.points[i];        
+		const PointCloud::ViewArr& views = pointcloud.pointViews[i];    
 		MVS::Interface::Vertex& vertex = obj.vertices[i];
 		ASSERT(sizeof(vertex.X.x) == sizeof(point.x));
 		vertex.X = point;
 		vertex.views.resize(views.GetSize());
 		views.ForEach([&](PointCloud::ViewArr::IDX v) {
-			MVS::Interface::Vertex::View& view = vertex.views[v];
+			MVS::Interface::Vertex::View& view = vertex.views[v]; // imageID + confidence
 			view.imageID = views[v];
 			view.confidence = (pointcloud.pointWeights.IsEmpty() ? 0.f : pointcloud.pointWeights[i][v]);
 		});
@@ -250,73 +240,114 @@ bool Scene::SaveInterface(const String & fileName, int version) const
 		obj.verticesNormal.resize(pointcloud.normals.GetSize());
 		FOREACH(i, pointcloud.normals) {
 			const PointCloud::Normal& normal = pointcloud.normals[i];
-			MVS::Interface::Normal& vertexNormal = obj.verticesNormal[i];
+			MVS::Interface::VertexNormal& vertexNormal = obj.verticesNormal[i];
 			vertexNormal.n = normal;
 		}
-	}
-	if (!pointcloud.colors.IsEmpty()) {
+	}         
+	if (!pointcloud.normals.IsEmpty()) {
 		obj.verticesColor.resize(pointcloud.colors.GetSize());
 		FOREACH(i, pointcloud.colors) {
 			const PointCloud::Color& color = pointcloud.colors[i];
-			MVS::Interface::Color& vertexColor = obj.verticesColor[i];
+			MVS::Interface::VertexColor& vertexColor = obj.verticesColor[i];
 			vertexColor.c = color;
 		}
 	}
-
 	// serialize out the current state
-	if (!ARCHIVE::SerializeSave(obj, fileName, version>=0?uint32_t(version):MVSI_PROJECT_VER))
+/*	if (!ARCHIVE::SerializeSave(obj, fileName))
 		return false;
-
 	DEBUG_EXTRA("Scene saved to interface format (%s):\n"
 				"\t%u images (%u calibrated)\n"
 				"\t%u points, %u vertices, %u faces",
 				TD_TIMER_GET_FMT().c_str(),
 				images.GetSize(), nCalibratedImages,
-				pointcloud.points.GetSize(), mesh.vertices.GetSize(), mesh.faces.GetSize());
+				pointcloud.points.GetSize(), mesh.vertices.GetSize(), mesh.faces.GetSize());*/            
 	return true;
 } // SaveInterface
 /*----------------------------------------------------------------*/
 
-// try to load known point-cloud or mesh files
-bool Scene::Import(const String& fileName)
+bool Scene::Export(const String & fileName) const
 {
-	const String ext(Util::getFileExt(fileName).ToLower());
-	if (ext == _T(".obj")) {
-		// import mesh from obj file
-		Release();
-		return mesh.Load(fileName);
-	}
-	if (ext == _T(".ply")) {
-		// import point-cloud/mesh from ply file
-		Release();
-		int nVertices(0), nFaces(0);
-		{
-		PLY ply;
-		if (!ply.read(fileName)) {
-			DEBUG_EXTRA("error: invalid PLY file");
-			return false;
-		}
-		for (int i = 0; i < (int)ply.elems.size(); ++i) {
-			int elem_count;
-			LPCSTR elem_name = ply.setup_element_read(i, &elem_count);
-			if (PLY::equal_strings("vertex", elem_name)) {
-				nVertices = elem_count;
-			} else
-			if (PLY::equal_strings("face", elem_name)) {
-				nFaces = elem_count;
-			}
-		}
-		}
-		if (nVertices && nFaces)
-			return mesh.Load(fileName);
-		if (nVertices)
-			return pointcloud.Load(fileName);
-	}
-	return false;
-} // Import
+    TD_TIMER_STARTD();
+    Interface obj;
+    std::ofstream fs(fileName, std::ofstream::binary);
+    if (!fs.is_open())
+        return false;
+
+ // export all the views, sorted by index
+    obj.vertices.resize(pointcloud.points.GetSize());
+        FOREACH(i, pointcloud.points) {
+        const PointCloud::Point& point = pointcloud.points[i];
+        const PointCloud::ViewArr& views = pointcloud.pointViews[i];
+
+        MVS::Interface::Vertex& vertex = obj.vertices[i];
+        ASSERT(sizeof(vertex.X.x) == sizeof(point.x));
+        vertex.X = point;
+        fs.write((const char*)&point.x, sizeof(uint32_t)*3);
+
+        vertex.views.resize(views.GetSize());
+        const size_t s = views.GetSize();
+        fs.write((const char*)&s, sizeof(std::size_t));
+        
+        views.ForEach([&](PointCloud::ViewArr::IDX v) {
+            MVS::Interface::Vertex::View& view = vertex.views[v]; // imageID + confidence
+            view.imageID = views[v];
+            fs.write((const char*)&view.imageID, sizeof(uint32_t)); 
+			view.confidence = (pointcloud.pointWeights.IsEmpty() ? 0.f : pointcloud.pointWeights[i][v]);
+            fs.write((const char*)&view.confidence, sizeof(uint32_t));
+            
+        });     
+    }
+/* // export the 6 first views, sorted by confidence
+	const int64_t nPoints((int64_t)pointcloud.points.GetSize());
+//	for (int64_t i=0; i<nPoints; ++i) {
+    for (int64_t i=0; i < 10; ++i){
+        
+        const PointCloud::Point& point = pointcloud.points[i];
+        const PointCloud::ViewArr& views = pointcloud.pointViews[i];
+
+//from SceneDensify.cpp at line 1441        
+
+        const PointCloud::WeightArr& weights = pointcloud.pointWeights[i];
+        ASSERT(!weights.IsEmpty());
+        uint32_t idxView(0);
+
+        float bestWeight = weights.First();
+        cout << "weights.First() : " << weights.First() << "\n";
+
+        cList<PointCloud::ViewArr::IDX> sortedWeights(0, weights.GetSize());
+        
+        while (!weights.IsEmpty()){
+            for (uint32_t idx=1; idx<weights.GetSize(); ++idx) {
+                const PointCloud::Weight& weight = weights[idx];
+                if (bestWeight < weight) {
+                    bestWeight = weight;
+                    idxView = idx;
+                    sortedWeights[idx] = weight;
+                    weights.RemoveAt(idx);
+                }
+            }
+        }
+
+    }    
+          */            
+
+
+    
+    DEBUG_EXTRA("Scene exported (%s):\n"
+        "\t%u images with a total of %u points\n",
+        TD_TIMER_GET_FMT().c_str(),
+        images.GetSize(), pointcloud.points.GetSize());
+
+    fs.close();    
+
+	return true;
+
+}
+
+// Export
 /*----------------------------------------------------------------*/
 
-bool Scene::Load(const String& fileName, bool bImport)
+bool Scene::Load(const String& fileName)
 {
 	TD_TIMER_STARTD();
 	Release();
@@ -331,8 +362,6 @@ bool Scene::Load(const String& fileName, bool bImport)
 	fs.read(szHeader, 4);
 	if (!fs || _tcsncmp(szHeader, PROJECT_ID, 4) != 0) {
 		fs.close();
-		if (bImport && Import(fileName))
-			return true;
 		if (LoadInterface(fileName))
 			return true;
 		VERBOSE("error: invalid project");
@@ -380,12 +409,6 @@ bool Scene::Load(const String& fileName, bool bImport)
 bool Scene::Save(const String& fileName, ARCHIVE_TYPE type) const
 {
 	TD_TIMER_STARTD();
-	// save using MVS interface if requested
-	if (type == ARCHIVE_MVS) {
-		if (mesh.IsEmpty())
-			return SaveInterface(fileName);
-		type = ARCHIVE_BINARY_ZIP;
-	}
 	#ifdef _USE_BOOST
 	// open the output stream
 	std::ofstream fs(fileName, std::ios::out | std::ios::binary);
@@ -405,12 +428,6 @@ bool Scene::Save(const String& fileName, ARCHIVE_TYPE type) const
 	// serialize out the current state
 	if (!SerializeSave(*this, fs, type))
 		return false;
-	DEBUG_EXTRA("Scene saved (%s):\n"
-				"\t%u images (%u calibrated)\n"
-				"\t%u points, %u vertices, %u faces",
-				TD_TIMER_GET_FMT().c_str(),
-				images.GetSize(), nCalibratedImages,
-				pointcloud.points.GetSize(), mesh.vertices.GetSize(), mesh.faces.GetSize());
 	return true;
 	#else
 	return false;
@@ -420,13 +437,9 @@ bool Scene::Save(const String& fileName, ARCHIVE_TYPE type) const
 
 
 inline float Footprint(const Camera& camera, const Point3f& X) {
-	#if 0
 	const REAL fSphereRadius(1);
 	const Point3 cX(camera.TransformPointW2C(Cast<REAL>(X)));
 	return (float)norm(camera.TransformPointC2I(Point3(cX.x+fSphereRadius,cX.y,cX.z))-camera.TransformPointC2I(cX))+std::numeric_limits<float>::epsilon();
-	#else
-	return (float)(camera.GetFocalLength()/camera.PointDepth(X));
-	#endif
 }
 
 // compute visibility for the reference image
@@ -468,15 +481,16 @@ bool Scene::SelectNeighborViews(uint32_t ID, IndexArr& points, unsigned nMinView
 		// score shared views
 		const Point3f V1(imageData.camera.C - Cast<REAL>(point));
 		const float footprint1(Footprint(imageData.camera, point));
-		for (const PointCloud::View& view: views) {
+		FOREACHPTR(pView, views) {
+			const PointCloud::View& view = *pView;
 			if (view == ID)
 				continue;
 			const Image& imageData2 = images[view];
 			const Point3f V2(imageData2.camera.C - Cast<REAL>(point));
-			const float fAngle(ACOS(ComputeAngle<float,float>(V1.ptr(), V2.ptr())));
-			const float wAngle(MINF(POW(fAngle/fOptimAngle, 1.5f), 1.f));
 			const float footprint2(Footprint(imageData2.camera, point));
+			const float fAngle(ACOS(ComputeAngle<float,float>(V1.ptr(), V2.ptr())));
 			const float fScaleRatio(footprint1/footprint2);
+			const float wAngle(MINF(POW(fAngle/fOptimAngle, 1.5f), 1.f));
 			float wScale;
 			if (fScaleRatio > 1.6f)
 				wScale = SQUARE(1.6f/fScaleRatio);
@@ -495,38 +509,40 @@ bool Scene::SelectNeighborViews(uint32_t ID, IndexArr& points, unsigned nMinView
 	ASSERT(nPoints > 3);
 
 	// select best neighborViews
-	Point2fArr projs(0, points.GetSize());
+	Point2fArr pointsA(0, points.GetSize()), pointsB(0, points.GetSize());
 	FOREACH(IDB, images) {
 		const Image& imageDataB = images[IDB];
 		if (!imageDataB.IsValid())
 			continue;
 		const Score& score = scores[IDB];
-		if (score.points < 3)
+		if (score.points == 0)
 			continue;
 		ASSERT(ID != IDB);
+		ViewScore& neighbor = neighbors.AddEmpty();
 		// compute how well the matched features are spread out (image covered area)
 		const Point2f boundsA(imageData.GetSize());
 		const Point2f boundsB(imageDataB.GetSize());
-		ASSERT(projs.IsEmpty());
-		for (uint32_t idx: points) {
-			const PointCloud::ViewArr& views = pointcloud.pointViews[idx];
+		ASSERT(pointsA.IsEmpty() && pointsB.IsEmpty());
+		FOREACHPTR(pIdx, points) {
+			const PointCloud::ViewArr& views = pointcloud.pointViews[*pIdx];
 			ASSERT(views.IsSorted());
 			ASSERT(views.FindFirst(ID) != PointCloud::ViewArr::NO_INDEX);
 			if (views.FindFirst(IDB) == PointCloud::ViewArr::NO_INDEX)
 				continue;
-			const PointCloud::Point& point = pointcloud.points[idx];
-			Point2f& ptA = projs.AddConstruct(imageData.camera.ProjectPointP(point));
-			Point2f ptB = imageDataB.camera.ProjectPointP(point);
-			if (!imageData.camera.IsInside(ptA, boundsA) || !imageDataB.camera.IsInside(ptB, boundsB))
-				projs.RemoveLast();
+			const PointCloud::Point& point = pointcloud.points[*pIdx];
+			Point2f& ptA = pointsA.AddConstruct(imageData.camera.ProjectPointP(point));
+			Point2f& ptB = pointsB.AddConstruct(imageDataB.camera.ProjectPointP(point));
+			if (!imageData.camera.IsInside(ptA, boundsA) || !imageDataB.camera.IsInside(ptB, boundsB)) {
+				pointsA.RemoveLast();
+				pointsB.RemoveLast();
+			}
 		}
-		ASSERT(projs.GetSize() <= score.points);
-		if (projs.IsEmpty())
-			continue;
-		const float area(ComputeCoveredArea<float,2,16,false>((const float*)projs.Begin(), projs.GetSize(), boundsA.ptr()));
-		projs.Empty();
+		ASSERT(pointsA.GetSize() == pointsB.GetSize() && pointsA.GetSize() <= score.points);
+		const float areaA(ComputeCoveredArea<float, 2, 16, false>((const float*)pointsA.Begin(), pointsA.GetSize(), boundsA.ptr()));
+		const float areaB(ComputeCoveredArea<float, 2, 16, false>((const float*)pointsB.Begin(), pointsB.GetSize(), boundsB.ptr()));
+		const float area(MINF(areaA, areaB));
+		pointsA.Empty(); pointsB.Empty();
 		// store image score
-		ViewScore& neighbor = neighbors.AddEmpty();
 		neighbor.idx.ID = IDB;
 		neighbor.idx.points = score.points;
 		neighbor.idx.scale = score.avgScale/score.points;
@@ -586,21 +602,19 @@ bool Scene::ExportCamerasMLP(const String& fileName, const String& fileNameScene
 		"   </MLMatrix44>\n"
 		"  </MLMesh>\n"
 		" </MeshGroup>\n";
-	static const char mlp_raster_pos[] =
+	static const char mlp_raster[] =
 		"  <MLRaster label=\"%s\">\n"
-		"   <VCGCamera TranslationVector=\"%0.6g %0.6g %0.6g 1\"";
-	static const char mlp_raster_cam[] =
+		"   <VCGCamera TranslationVector=\"%0.6g %0.6g %0.6g 1\""
 		" LensDistortion=\"%0.6g %0.6g\""
 		" ViewportPx=\"%u %u\""
 		" PixelSizeMm=\"1 %0.4f\""
 		" FocalMm=\"%0.4f\""
-		" CenterPx=\"%0.4f %0.4f\"";
-	static const char mlp_raster_rot[] =
+		" CenterPx=\"%0.4f %0.4f\""
 		" RotationMatrix=\"%0.6g %0.6g %0.6g 0 %0.6g %0.6g %0.6g 0 %0.6g %0.6g %0.6g 0 0 0 0 1\"/>\n"
 		"   <Plane semantic=\"\" fileName=\"%s\"/>\n"
 		"  </MLRaster>\n";
 
-	Util::ensureFolder(fileName);
+	Util::ensureDirectory(fileName);
 	File f(fileName, File::WRITE, File::CREATE | File::TRUNCATE);
 
 	// write MLP header containing the referenced PLY file
@@ -614,17 +628,13 @@ bool Scene::ExportCamerasMLP(const String& fileName, const String& fileNameScene
 		if (!imageData.IsValid())
 			continue;
 		const Camera& camera = imageData.camera;
-		f.print(mlp_raster_pos,
+		f.print(mlp_raster,
 			Util::getFileName(imageData.name).c_str(),
-			-camera.C.x, -camera.C.y, -camera.C.z
-		);
-		f.print(mlp_raster_cam,
+			-camera.C.x, -camera.C.y, -camera.C.z,
 			0, 0,
 			imageData.width, imageData.height,
 			camera.K(1,1)/camera.K(0,0), camera.K(0,0),
-			camera.K(0,2), camera.K(1,2)
-		);
-		f.print(mlp_raster_rot,
+			camera.K(0,2), camera.K(1,2),
 			 camera.R(0,0),  camera.R(0,1),  camera.R(0,2),
 			-camera.R(1,0), -camera.R(1,1), -camera.R(1,2),
 			-camera.R(2,0), -camera.R(2,1), -camera.R(2,2),

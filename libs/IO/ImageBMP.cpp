@@ -19,7 +19,6 @@ using namespace SEACAVE;
 // S T R U C T S ///////////////////////////////////////////////////
 
 #ifndef _MSC_VER
-typedef long LONG;
 typedef struct tagBITMAPFILEHEADER {
 	WORD    bfType;
 	DWORD   bfSize;
@@ -131,7 +130,7 @@ HRESULT CImageBMP::ReadHeader()
 /*----------------------------------------------------------------*/
 
 
-HRESULT CImageBMP::ReadData(void* pData, PIXELFORMAT dataFormat, Size nStride, Size lineWidth)
+HRESULT CImageBMP::ReadData(void* pData, PIXELFORMAT dataFormat, UINT nStride, UINT lineWidth)
 {
 	// read data
 	const size_t nSize = m_width*m_stride;
@@ -140,14 +139,14 @@ HRESULT CImageBMP::ReadData(void* pData, PIXELFORMAT dataFormat, Size nStride, S
 	if (dataFormat == m_format && nStride == m_stride) {
 		// read image directly to the data buffer
 		(BYTE*&)pData += (m_height-1)*lineWidth;
-		for (Size j=0; j<m_height; ++j,(uint8_t*&)pData-=lineWidth)
+		for (UINT j=0; j<m_height; ++j,(uint8_t*&)pData-=lineWidth)
 			if (nSize != m_pStream->read(pData, nSize) ||
 				(nPad && nPad != m_pStream->read(bufferPad, nPad)))
 				return _INVALIDFILE;
 	} else {
 		// read image to a buffer and convert it
 		CAutoPtrArr<uint8_t> const buffer(new uint8_t[m_lineWidth]);
-		for (Size j=0; j<m_height; ++j) {
+		for (UINT j=0; j<m_height; ++j) {
 			if (m_lineWidth != m_pStream->read(buffer, m_lineWidth))
 				return _INVALIDFILE;
 			if (!FilterFormat((uint8_t*)pData+(m_height-j-1)*lineWidth, dataFormat, nStride, buffer, m_format, m_stride, m_width))
@@ -159,7 +158,7 @@ HRESULT CImageBMP::ReadData(void* pData, PIXELFORMAT dataFormat, Size nStride, S
 /*----------------------------------------------------------------*/
 
 
-HRESULT CImageBMP::WriteHeader(PIXELFORMAT imageFormat, Size width, Size height, BYTE /*numLevels*/)
+HRESULT CImageBMP::WriteHeader(PIXELFORMAT imageFormat, UINT width, UINT height, BYTE /*numLevels*/)
 {
 	// write header
 	m_numLevels = 0;
@@ -231,7 +230,7 @@ HRESULT CImageBMP::WriteHeader(PIXELFORMAT imageFormat, Size width, Size height,
 /*----------------------------------------------------------------*/
 
 
-HRESULT CImageBMP::WriteData(void* pData, PIXELFORMAT dataFormat, Size nStride, Size lineWidth)
+HRESULT CImageBMP::WriteData(void* pData, PIXELFORMAT dataFormat, UINT nStride, UINT lineWidth)
 {
 	// write data
 	const size_t nSize = m_width*m_stride;
@@ -240,14 +239,14 @@ HRESULT CImageBMP::WriteData(void* pData, PIXELFORMAT dataFormat, Size nStride, 
 	if (nPad) memset(bufferPad, 0, nPad);
 	if (dataFormat == m_format && nStride == m_stride) {
 		// write data buffer directly to the image
-		for (Size j=0; j<m_height; ++j)
+		for (UINT j=0; j<m_height; ++j)
 			if (nSize != m_pStream->write((uint8_t*)pData+(m_height-j-1)*lineWidth, nSize) ||
 				(nPad && nPad != m_pStream->write(bufferPad, nPad)))
 				return _INVALIDFILE;
 	} else {
 		// convert data to a buffer and write it
 		CAutoPtrArr<uint8_t> const buffer(new uint8_t[m_lineWidth]);
-		for (Size j=0; j<m_height; ++j) {
+		for (UINT j=0; j<m_height; ++j) {
 			if (!FilterFormat(buffer, m_format, m_stride, (uint8_t*)pData+(m_height-j-1)*lineWidth, dataFormat, nStride, m_width))
 				return _FAIL;
 			if (m_lineWidth != m_pStream->write(buffer, m_lineWidth))

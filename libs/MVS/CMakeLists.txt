@@ -12,15 +12,10 @@ if(VCG_FOUND)
 	add_definitions(${VCG_DEFINITIONS})
 endif()
 
-set(CERES_LIBS "")
-if(OpenMVS_USE_CERES)
-	FIND_PACKAGE(CERES)
-	if(CERES_FOUND)
-		include_directories(${CERES_INCLUDE_DIRS})
-		add_definitions(${CERES_DEFINITIONS})
-	else()
-		set(OpenMVS_USE_CERES OFF)
-	endif()
+FIND_PACKAGE(CERES ${SYSTEM_PACKAGE_REQUIRED})
+if(CERES_FOUND)
+	include_directories(${CERES_INCLUDE_DIRS})
+	add_definitions(${CERES_DEFINITIONS})
 endif()
 
 # List sources files
@@ -42,7 +37,7 @@ cxx_library_with_type_no_pch(MVS "Libs" "" "${cxx_default}"
 set_target_pch(MVS Common.h)
 
 # Link its dependencies
-TARGET_LINK_LIBRARIES(MVS PRIVATE Common Math IO ${CERES_LIBS} ${CGAL_LIBS} ${CUDA_CUDA_LIBRARY})
+TARGET_LINK_LIBRARIES(MVS Common Math IO ${CERES_LIBS} ${CGAL_LIBS} ${CUDA_CUDA_LIBRARY})
 
 # Install
 SET_TARGET_PROPERTIES(MVS PROPERTIES

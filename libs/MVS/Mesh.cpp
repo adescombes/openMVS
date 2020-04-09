@@ -47,7 +47,6 @@
 #include <vcg/complex/algorithms/clean.h>
 #include <vcg/complex/algorithms/smooth.h>
 #include <vcg/complex/algorithms/hole.h>
-#include <vcg/complex/algorithms/polygon_support.h>
 // VCG: mesh simplification
 #include <vcg/complex/algorithms/update/position.h>
 #include <vcg/complex/algorithms/update/bounding.h>
@@ -93,26 +92,6 @@ void Mesh::EmptyExtra()
 	faceTexcoords.Empty();
 	textureDiffuse.release();
 } // EmptyExtra
-/*----------------------------------------------------------------*/
-
-
-// compute the axis-aligned bounding-box of the mesh
-Mesh::Box Mesh::GetAABB() const
-{
-	Box box(true);
-	for (const Vertex& X: vertices)
-		box.InsertFull(X);
-	return box;
-}
-// same, but only for vertices inside the given AABB
-Mesh::Box Mesh::GetAABB(const Box& bound) const
-{
-	Box box(true);
-	for (const Vertex& X: vertices)
-		if (bound.Intersects(X))
-			box.InsertFull(X);
-	return box;
-}
 /*----------------------------------------------------------------*/
 
 
@@ -1442,7 +1421,7 @@ bool Mesh::Save(const String& fileName, const cList<String>& comments, bool bBin
 bool Mesh::SavePLY(const String& fileName, const cList<String>& comments, bool bBinary) const
 {
 	ASSERT(!fileName.IsEmpty());
-	Util::ensureFolder(fileName);
+	Util::ensureDirectory(fileName);
 
 	// create PLY object
 	const size_t bufferSize(vertices.GetSize()*(4*3/*pos*/+2/*eol*/) + faces.GetSize()*(1*1/*len*/+4*3/*idx*/+2/*eol*/) + 2048/*extra size*/);
@@ -1459,8 +1438,8 @@ bool Mesh::SavePLY(const String& fileName, const cList<String>& comments, bool b
 	// export texture file name as comment if needed
 	String textureFileName;
 	if (!faceTexcoords.IsEmpty() && !textureDiffuse.empty()) {
-		textureFileName = Util::getFileFullName(fileName)+_T(".png");
-		ply.append_comment((_T("TextureFile ")+Util::getFileNameExt(textureFileName)).c_str());
+		textureFileName = Util::getFullFileName(fileName)+_T(".png");
+		ply.append_comment((_T("TextureFile ")+Util::getFileFullName(textureFileName)).c_str());
 	}
 
 	if (vertexNormals.IsEmpty()) {
@@ -1525,7 +1504,7 @@ bool Mesh::SavePLY(const String& fileName, const cList<String>& comments, bool b
 bool Mesh::SaveOBJ(const String& fileName) const
 {
 	ASSERT(!fileName.IsEmpty());
-	Util::ensureFolder(fileName);
+	Util::ensureDirectory(fileName);
 
 	// create the OBJ model
 	ObjModel model;
@@ -1578,7 +1557,7 @@ bool Mesh::SaveOBJ(const String& fileName) const
 bool Mesh::Save(const VertexArr& vertices, const String& fileName, bool bBinary)
 {
 	ASSERT(!fileName.IsEmpty());
-	Util::ensureFolder(fileName);
+	Util::ensureDirectory(fileName);
 
 	// create PLY object
 	const size_t bufferSize(vertices.GetSize()*(4*3/*pos*/+2/*eol*/) + 2048/*extra size*/);
@@ -2852,10 +2831,9 @@ void Mesh::Subdivide(const AreaArr& maxAreas, uint32_t maxArea)
 	FacetCountMap mapFaces; mapFaces.reserve(12*3);
 	vertices.Reserve(vertices.GetSize()*2);
 	faces.Reserve(faces.GetSize()*3);
-	const uint32_t maxAreaTh(2*maxArea);
 	FOREACH(f, maxAreas) {
 		const AreaArr::Type area(maxAreas[f]);
-		if (area <= maxAreaTh)
+		if (area <= maxArea)
 			continue;
 		// split face in four triangles
 		// by adding a new vertex at the middle of each edge
@@ -2893,7 +2871,7 @@ void Mesh::Subdivide(const AreaArr& maxAreas, uint32_t maxArea)
 			ASSERT(fc.second.count <= 2 || (fc.second.count == 3 && fc.first == f));
 			if (fc.second.count != 2)
 				continue;
-			if (fc.first < f && maxAreas[fc.first] > maxAreaTh) {
+			if (fc.first < f && maxAreas[fc.first] > maxArea) {
 				// already fully split, nothing to do
 				ASSERT(mapSplits[fc.first].idxVert[SplitFace::FindSharedEdge(faces[fc.first], face)] == newface[SplitFace::FindSharedEdge(face, faces[fc.first])]);
 				continue;
@@ -3441,94 +3419,6 @@ REAL Mesh::ComputeVolume() const
 
 
 // project mesh to the given camera plane
-void Mesh::SamplePoints(unsigned numberOfPoints, PointCloud& pointcloud) const
-{
-	// total mesh surface
-	const REAL area(ComputeArea());
-	if (area < ZEROTOLERANCE<float>()) {
-		pointcloud.Release();
-		return;
-	}
-	const REAL samplingDensity(numberOfPoints / area);
-	return SamplePoints(samplingDensity, numberOfPoints, pointcloud);
-}
-void Mesh::SamplePoints(REAL samplingDensity, PointCloud& pointcloud) const
-{
-	// compute the total area to deduce the number of points
-	const REAL area(ComputeArea());
-	const unsigned theoreticNumberOfPoints((unsigned)CEIL2INT(area * samplingDensity));
-	return SamplePoints(samplingDensity, theoreticNumberOfPoints, pointcloud);
-}
-void Mesh::SamplePoints(REAL samplingDensity, unsigned mumPointsTheoretic, PointCloud& pointcloud) const
-{
-	ASSERT(!IsEmpty());
-	pointcloud.Release();
-	if (mumPointsTheoretic > 0) {
-		pointcloud.points.reserve(mumPointsTheoretic);
-		if (HasTexture())
-			pointcloud.colors.reserve(mumPointsTheoretic);
-	}
-
-	// for each triangle
-	std::mt19937 rnd((std::random_device())());
-	std::uniform_real_distribution<REAL> dist(0,1);
-	FOREACH(idxFace, faces) {
-		const Face& face = faces[idxFace];
-
-		// vertices (OAB)
-		const Vertex& O = vertices[face[0]];
-		const Vertex& A = vertices[face[1]];
-		const Vertex& B = vertices[face[2]];
-
-		// edges (OA and OB)
-		const Vertex u(A - O);
-		const Vertex v(B - O);
-
-		// compute triangle area
-		const REAL area(norm(u.cross(v)) * REAL(0.5));
-
-		// deduce the number of points to generate on this face
-		const REAL fPointsToAdd(area*samplingDensity);
-		unsigned pointsToAdd(static_cast<unsigned>(fPointsToAdd));
-
-		// take care of the remaining fractional part;
-		// add a point with the same probability as its (relative) area
-		const REAL fracPart(fPointsToAdd - static_cast<REAL>(pointsToAdd));
-		if (dist(rnd) <= fracPart)
-			pointsToAdd++;
-
-		for (unsigned i = 0; i < pointsToAdd; ++i) {
-			// generate random points as in:
-			// "Generating random points in triangles", Greg Turk;
-			// in A. S. Glassner, editor, Graphics Gems, pages 24-28. Academic Press, 1990
-			REAL x(dist(rnd));
-			REAL y(dist(rnd));
-
-			// test if the generated point lies on the right side of (AB)
-			if (x + y > REAL(1)) {
-				x = REAL(1) - x;
-				y = REAL(1) - y;
-			}
-
-			// compute position
-			pointcloud.points.emplace_back(O + static_cast<Vertex::Type>(x)*u + static_cast<Vertex::Type>(y)*v);
-
-			if (HasTexture()) {
-				// compute color
-				const FIndex idxTexCoord(idxFace*3);
-				const TexCoord& TO = faceTexcoords[idxTexCoord+0];
-				const TexCoord& TA = faceTexcoords[idxTexCoord+1];
-				const TexCoord& TB = faceTexcoords[idxTexCoord+2];
-				const TexCoord xt(TO + static_cast<TexCoord::Type>(x)*(TA - TO) + static_cast<TexCoord::Type>(y)*(TB - TO));
-				pointcloud.colors.emplace_back(textureDiffuse.sampleSafe(Point2f(xt.x*textureDiffuse.width(), (1.f-xt.y)*textureDiffuse.height())));
-			}
-		}
-	}
-}
-/*----------------------------------------------------------------*/
-
-
-// project mesh to the given camera plane
 void Mesh::Project(const Camera& camera, DepthMap& depthMap) const
 {
 	struct RasterMesh : TRasterMesh<RasterMesh> {
@@ -3591,7 +3481,7 @@ void Mesh::ProjectOrtho(const Camera& camera, DepthMap& depthMap) const
 			: Base(_vertices, _camera, _depthMap) {}
 		inline bool ProjectVertex(const Mesh::Vertex& pt, int v) {
 			ptc[v] = camera.TransformPointW2C(Cast<REAL>(pt));
-			pti[v] = camera.TransformPointC2I(reinterpret_cast<const Point2&>(ptc[v]));
+			pti[v] = camera.TransformPointC2I((const Point2&)ptc[v]);
 			return depthMap.isInsideWithBorder<float,3>(pti[v]);
 		}
 		void Raster(const ImageRef& pt) {
@@ -3627,7 +3517,7 @@ void Mesh::ProjectOrtho(const Camera& camera, DepthMap& depthMap, Image8U3& imag
 		}
 		inline bool ProjectVertex(const Mesh::Vertex& pt, int v) {
 			ptc[v] = camera.TransformPointW2C(Cast<REAL>(pt));
-			pti[v] = camera.TransformPointC2I(reinterpret_cast<const Point2&>(ptc[v]));
+			pti[v] = camera.TransformPointC2I((const Point2&)ptc[v]);
 			return depthMap.isInsideWithBorder<float,3>(pti[v]);
 		}
 		inline bool CheckNormal(const Point3& /*faceCenter*/) {

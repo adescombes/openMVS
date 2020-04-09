@@ -11,13 +11,6 @@
 
 // I N C L U D E S /////////////////////////////////////////////////
 
-#ifdef _MSC_VER
-#include <io.h>
-#else
-#include <unistd.h>
-#include <dirent.h>
-#endif
-
 
 // D E F I N E S ///////////////////////////////////////////////////
 
@@ -267,204 +260,102 @@ public:
 		#endif // _MSC_VER
 	}
 
-	static String& trimUnifySlash(String& path)
+	static String& trimUnifySlash(String& aFile)
 	{
 		String::size_type start = 1;
-		while ((start = path.find(PATH_SEPARATOR, start)) != String::npos)
-			if (path[start-1] == PATH_SEPARATOR)
-				path.erase(start, 1);
+		while ((start = aFile.find(PATH_SEPARATOR, start)) != String::npos)
+			if (aFile[start-1] == PATH_SEPARATOR)
+				aFile.erase(start, 1);
 			else
 				++start;
-		return path;
+		return aFile;
 	}
-	static String& ensureUnifySlash(String& path)
+	static String& ensureUnifySlash(String& aFile)
 	{
 		String::size_type start = 0;
-		while ((start = path.find(REVERSE_PATH_SEPARATOR, start)) != String::npos)
-			path[start] = PATH_SEPARATOR;
-		return trimUnifySlash(path);
+		while ((start = aFile.find(REVERSE_PATH_SEPARATOR, start)) != String::npos)
+			aFile[start] = PATH_SEPARATOR;
+		return trimUnifySlash(aFile);
 	}
-	static String& ensureUnifyReverseSlash(String& path)
+	static String& ensureUnifyReverseSlash(String& aFile)
 	{
 		String::size_type start = 0;
-		while ((start = path.find(PATH_SEPARATOR, start)) != String::npos)
-			path[start] = REVERSE_PATH_SEPARATOR;
-		return path;
+		while ((start = aFile.find(PATH_SEPARATOR, start)) != String::npos)
+			aFile[start] = REVERSE_PATH_SEPARATOR;
+		return aFile;
 	}
 
-	static String& ensureFolderSlash(String& path)
+	static String& ensureDirectorySlash(String& aFile)
 	{
-		if (path.empty())
-			return path;
-		String::size_type nEnd = path.size()-1;
-		if (path[nEnd] != PATH_SEPARATOR)
-			path += PATH_SEPARATOR;
-		return path;
+		if (aFile.empty())
+			return aFile;
+		String::size_type nEnd = aFile.size()-1;
+		if (aFile[nEnd] != PATH_SEPARATOR)
+			aFile += PATH_SEPARATOR;
+		return aFile;
 	}
 
-	static void ensureFolder(const String& path)
+	static void ensureDirectory(const String& aFile)
 	{
 		String::size_type start = 0;
-		while ((start = path.find(PATH_SEPARATOR, start)) != String::npos)
+		while ((start = aFile.find(PATH_SEPARATOR, start)) != String::npos)
 			#ifdef _MSC_VER
-			CreateDirectory(path.substr(0, ++start).c_str(), NULL);
+			CreateDirectory(aFile.substr(0, ++start).c_str(), NULL);
 			#else
-			mkdir(path.substr(0, ++start).c_str(), 0755);
+			mkdir(aFile.substr(0, ++start).c_str(), 0755);
 			#endif
 	}
 
-	static String& ensureValidPath(String& path) {
-		return simplifyPath(ensureUnifySlash(strTrim(path, _T("\""))));
+	static String& ensureValidPath(String& str) {
+		return strTrim(ensureUnifySlash(str), _T("\""));
 	}
-	static String& ensureValidFolderPath(String& path) {
-		return simplifyPath(ensureFolderSlash(ensureUnifySlash(strTrim(path, _T("\"")))));
+	static String& ensureValidDirectoryPath(String& str) {
+		return strTrim(ensureUnifySlash(ensureDirectorySlash(str)), _T("\""));
 	}
 
 	static inline bool isFullPath(LPCTSTR path) {
 		// returns true if local drive full path or network path
 		return (path && (
 			#ifdef _MSC_VER
-			(path[1]==_T(':') && path[0]!=_T('\0')) ||
+			path[1]==_T(':') ||
 			#else // _MSC_VER
 			path[0]==_T('/') ||
 			#endif // _MSC_VER
 			#ifdef UNICODE
-			*reinterpret_cast<const DWORD*>(path)==0x5C005C00/*"\\\\"*/));
+			*((DWORD*)path)==0x5C005C00/*"\\\\"*/));
 			#else
-			*reinterpret_cast<const WORD*>(path)==0x5C5C/*"\\\\"*/));
+			*((WORD*)path)==0x5C5C/*"\\\\"*/));
 			#endif // UNICODE
 	}
 	static String getFullPath(const String& str) {
 		if (isFullPath(str))
 			return str;
-		return getCurrentFolder()+str;
+		return getCurrentDirectory()+str;
 	}
 
-	static inline bool isParentFolder(LPCTSTR path, int off=0) {
-		// returns true if the folder starting at the given position in path is the parent folder ".."
-		if (off < 0 || path[off] != _T('.'))
-			return false;
-		if (off > 0 && path[off-1] != PATH_SEPARATOR)
-			return false;
-		if (path[off+1] != _T('.'))
-			return false;
-		return path[off+2] == _T('\0') || path[off+2] == PATH_SEPARATOR;
-	}
-
-	static String getHomeFolder();
-	static String getApplicationFolder();
-	static String getCurrentFolder();
-	static String getProcessFolder() {
+	static String getHomeDirectory();
+	static String getAppplicationsDirectory();
+	static String getCurrentDirectory();
+	static String getProcessDirectory() {
 		return getFilePath(getAppName());
 	}
 
-	static String ensureUnitPath(const String& path)
+	static String ensureUnitPath(const String& aFile)
 	{
-		if (path.find(_T(" ")) == String::npos)
-			return path;
-		return String(_T("\"")+path+_T("\""));
-	}
-
-	static String& simplifyPath(String& path) {
-		// compress path by removing all "./" and "folder/../" occurrences
-		// (if path only, it should end in path-separator)
-		{
-		// removes all "./" occurrences
-		String::size_type i(0);
-		while ((i = path.find(_T(".") PATH_SEPARATOR_STR, i)) != String::npos) {
-			if (i > 0 && path[i-1] != PATH_SEPARATOR)
-				i += 2;
-			else
-				path.erase(i, 2);
-		}}
-		{
-		// removes all "folder/../" occurrences
-		String::size_type i(0);
-		while ((i = path.find(_T("..") PATH_SEPARATOR_STR, i)) != String::npos) {
-			if (i > 1 && path[i-1] == PATH_SEPARATOR) {
-				String::size_type prev = path.rfind(PATH_SEPARATOR, i-2);
-				if (prev == String::npos) prev = 0; else ++prev;
-				if (!isParentFolder(path, (int)prev)) {
-					path.erase(prev, i+3-prev);
-					i = prev;
-					continue;
-				}
-			}
-			i += 3;
-		}}
-		return path;
-	}
-	static String getSimplifiedPath(String path) {
-		return simplifyPath(path);
-	}
-
-	static String getRelativePath(const String& currentPath, const String& targetPath) {
-		// returns the path to the target relative to the current path;
-		// both current and target paths must be full paths;
-		// current path is assumed to be a folder, while target path can be also a file
-		CLISTDEF2(String) currentPathValues, targetPathValues;
-		Util::strSplit(currentPath, PATH_SEPARATOR, currentPathValues);
-		if (currentPathValues.back().empty())
-			currentPathValues.pop_back();
-		Util::strSplit(targetPath, PATH_SEPARATOR, targetPathValues);
-		size_t idxCurrentPath(0), idxTargetPath(0);
-		while (
-			idxCurrentPath < currentPathValues.size() &&
-			idxTargetPath < targetPathValues.size() &&
-			#ifdef _MSC_VER
-			_tcsicmp(currentPathValues[idxCurrentPath], targetPathValues[idxTargetPath]) == 0
-			#else
-			_tcscmp(currentPathValues[idxCurrentPath], targetPathValues[idxTargetPath]) == 0
-			#endif
-		)
-			++idxCurrentPath, ++idxTargetPath;
-		if (idxCurrentPath == 0)
-			return targetPath;
-		String relativePath;
-		relativePath.reserve(targetPath.size());
-		while (idxCurrentPath < currentPathValues.size()) {
-			relativePath += _T("..") PATH_SEPARATOR_STR;
-			++idxCurrentPath;
-		}
-		const size_t idxFirstTarget(idxTargetPath);
-		while (idxTargetPath < targetPathValues.size()) {
-			if (idxTargetPath > idxFirstTarget)
-				relativePath += PATH_SEPARATOR;
-			relativePath += targetPathValues[idxTargetPath++];
-		}
-		return relativePath;
-	}
-
-	static String& getCommonPath(String& commonPath, const String& path) {
-		// returns the path shared by the given paths
-		#ifdef _MSC_VER
-		while (_tcsnicmp(commonPath, path, commonPath.length()) != 0) {
-		#else
-		while (_tcsncmp(commonPath, path, commonPath.length()) != 0) {
-		#endif
-			commonPath.pop_back();
-			commonPath = getFilePath(commonPath);
-		}
-		return commonPath;
-	}
-	static String getCommonPath(const String* arrPaths, size_t numPaths) {
-		// returns the path shared by all given paths
-		ASSERT(numPaths > 0);
-		String commonPath(arrPaths[0]);
-		for (size_t i=1; !commonPath.empty() && i<numPaths; ++i)
-			getCommonPath(commonPath, arrPaths[i]);
-		return commonPath;
+		if (aFile.find(_T(" ")) == String::npos)
+			return aFile;
+		return String(_T("\"")+aFile+_T("\""));
 	}
 
 	static String getFilePath(const String& path) {
 		const String::size_type i = path.rfind(PATH_SEPARATOR);
 		return (i != String::npos) ? path.substr(0, i+1) : String();
 	}
-	static String getFileFullName(const String& path) {
+	static String getFullFileName(const String& path) {
 		const String::size_type i = path.rfind('.');
 		return (i != String::npos) ? String(path.substr(0, i)) : path;
 	}
-	static String getFileNameExt(const String& path) {
+	static String getFileFullName(const String& path) {
 		const String::size_type i = path.rfind(PATH_SEPARATOR);
 		if (i != String::npos)
 			return path.substr(i+1);
@@ -527,24 +418,18 @@ public:
 		return str;
 	}
 	// split an input string with a delimiter and fill a string vector
-	static void strSplit(const String& str, TCHAR delim, CLISTDEF2(String)& values) {
-		values.Empty();
-		String::size_type start(0), end(0);
+	static bool strSplit(const String& str, const String& delim, std::vector<String>& values) {
+		if (delim.empty())
+			return false;
+		values.clear();
+		String::size_type start(0);
+		String::size_type end(String::npos -1);
 		while (end != String::npos) {
 			end = str.find(delim, start);
-			values.AddConstruct(str.substr(start, end-start));
-			start = end + 1;
-		}
-	}
-	static void strSplit(const String& str, const String& delim, CLISTDEF2(String)& values) {
-		ASSERT(!delim.empty());
-		values.Empty();
-		String::size_type start(0), end(0);
-		while (end != String::npos) {
-			end = str.find(delim, start);
-			values.AddConstruct(str.substr(start, end-start));
+			values.push_back(str.substr(start, end-start));
 			start = end + delim.size();
 		}
+		return (values.size() >= 2);
 	}
 
 	static String getShortTimeString() {
@@ -589,38 +474,38 @@ public:
 	// format given time in milliseconds to higher units
 	static String formatTime(int64_t sTime, uint32_t nAproximate = 0) {
 		char buf[128];
-		uint32_t len = 0;
-		uint32_t nrNumbers = 0;
+		UINT len = 0;
+		UINT nrNumbers = 0;
 
-		uint32_t rez = (uint32_t)(sTime / ((int64_t)24*3600*1000));
+		UINT rez = (UINT)(sTime / ((int64_t)24*3600*1000));
 		if (rez) {
 			++nrNumbers;
 			len += _stprintf(buf+len, "%ud", rez);
 		}
 		if (nAproximate > 3 && nrNumbers > 0)
 			return buf;
-		rez = (uint32_t)((sTime%((int64_t)24*3600*1000)) / (3600*1000));
+		rez = (UINT)((sTime%((int64_t)24*3600*1000)) / (3600*1000));
 		if (rez) {
 			++nrNumbers;
 			len += _stprintf(buf+len, "%uh", rez);
 		}
 		if (nAproximate > 2 && nrNumbers > 0)
 			return buf;
-		rez = (uint32_t)((sTime%((int64_t)3600*1000)) / (60*1000));
+		rez = (UINT)((sTime%((int64_t)3600*1000)) / (60*1000));
 		if (rez) {
 			++nrNumbers;
 			len += _stprintf(buf+len, "%um", rez);
 		}
 		if (nAproximate > 1 && nrNumbers > 0)
 			return buf;
-		rez = (uint32_t)((sTime%((int64_t)60*1000)) / (1*1000));
+		rez = (UINT)((sTime%((int64_t)60*1000)) / (1*1000));
 		if (rez) {
 			++nrNumbers;
 			len += _stprintf(buf+len, "%us", rez);
 		}
 		if (nAproximate > 0 && nrNumbers > 0)
 			return buf;
-		rez = (uint32_t)(sTime%((int64_t)1*1000));
+		rez = (UINT)(sTime%((int64_t)1*1000));
 		if (rez || !nrNumbers)
 			len += _stprintf(buf+len, "%ums", rez);
 
@@ -631,7 +516,8 @@ public:
 		if (wsz == NULL)
 			return String();
 		#if 1
-		return std::wstring_convert<std::codecvt_utf8<wchar_t>, wchar_t>().to_bytes(wsz);
+		const std::wstring ws(wsz);
+		return std::string(ws.cbegin(), ws.cend());
 		#elif 1
 		std::mbstate_t state = std::mbstate_t();
 		const size_t len(std::wcsrtombs(NULL, &wsz, 0, &state));
@@ -641,7 +527,7 @@ public:
 		if (std::wcsrtombs(&mbstr[0], &wsz, mbstr.size(), &state) == static_cast<std::size_t>(-1))
 			return String();
 		return String(&mbstr[0]);
-		#else
+		#elif 1
 		const std::wstring ws(wsz);
 		const std::locale locale("");
 		typedef std::codecvt<wchar_t, char, std::mbstate_t> converter_type;
@@ -653,6 +539,10 @@ public:
 		if (converter.out(state, ws.data(), ws.data() + ws.length(), from_next, &to[0], &to[0] + to.size(), to_next) != converter_type::ok)
 			return String();
 		return std::string(&to[0], to_next);
+		#else
+		typedef std::codecvt_utf8<wchar_t> convert_typeX;
+		std::wstring_convert<convert_typeX, wchar_t> converterX;
+		return converterX.to_bytes(wstr);
 		#endif
 	}
 
@@ -743,8 +633,6 @@ public:
 		return uCRC64;
 	}
 
-
-	static void		Init();
 
 	static String	GetCPUInfo();
 	static String	GetRAMInfo();

@@ -136,7 +136,7 @@ protected:
 /*----------------------------------------------------------------*/
 
 
-#ifndef _RELEASE
+#ifdef _DEBUG
 class DisjointRectCollection
 {
 public:
@@ -272,7 +272,7 @@ protected:
 	/// Stores a list of rectangles that represents the free area of the bin. This rectangles in this list are disjoint.
 	std::vector<Rect> freeRectangles;
 
-	#ifndef _RELEASE
+	#ifdef _DEBUG
 	/// Used to track that the packer produces proper packings.
 	DisjointRectCollection disjointRects;
 	#endif
@@ -349,7 +349,7 @@ protected:
 	int binWidth;
 	int binHeight;
 
-	#ifndef _RELEASE
+	#ifdef _DEBUG
 	DisjointRectCollection disjointRects;
 	#endif
 

@@ -41,7 +41,6 @@
 #endif
 #include <new>
 #include <string>
-#include <codecvt>
 #include <iostream>
 #include <fstream>
 #include <sstream>
@@ -61,7 +60,6 @@
 #include <iterator>
 #include <cmath>
 #include <ctime>
-#include <random>
 #ifdef _USE_OPENMP
 #include <omp.h>
 #endif
@@ -80,16 +78,18 @@
 #define DELEGATEBINDCLASS(DLGT, FNC, OBJ) fastdelegate::bind(FNC, OBJ)
 #endif
 
+// File-System utils (stlplus)
+#include "Wildcard.h"
+
 // include usual boost libraries
 #ifdef _USE_BOOST
 #if 1
 // disable exception support
-#define BOOST_NO_UNREACHABLE_RETURN_DETECTION
 #define BOOST_EXCEPTION_DISABLE
 #define BOOST_NO_EXCEPTIONS
 #endif
 #ifdef BOOST_NO_EXCEPTIONS
-#include <boost/throw_exception.hpp>
+namespace boost { void throw_exception(std::exception const&); }
 #endif
 #define BOOST_NO_UNREACHABLE_RETURN_DETECTION
 // include headers that implement serialization support
@@ -132,10 +132,6 @@
 #endif
 #endif
 
-#pragma push_macro("free")
-#undef free
-#pragma push_macro("DEBUG")
-#undef DEBUG
 #include <opencv2/core/version.hpp>
 #if CV_MAJOR_VERSION > 2 || CV_MINOR_VERSION > 3
 #include <opencv2/opencv_modules.hpp>
@@ -149,8 +145,6 @@ namespace cv { namespace gpu = cuda; }
 #include <opencv2/gpu/gpu.hpp>
 #endif
 #endif
-#pragma pop_macro("DEBUG")
-#pragma pop_macro("free")
 
 #ifdef _USE_SSE
 #include <xmmintrin.h>
@@ -198,10 +192,6 @@ namespace cv { namespace gpu = cuda; }
 #ifndef __THREAD__
 # ifdef _MSC_VER
 #  define __THREAD__ ((unsigned)GetCurrentThreadId())
-# elif defined(__APPLE__)
-#  include <pthread.h>
-inline pid_t GetCurrentThreadId() { uint64_t tid64; pthread_threadid_np(NULL, &tid64); return (pid_t)tid64; }
-#  define __THREAD__ ((unsigned)GetCurrentThreadId())
 # else
 #  include <sys/syscall.h>
 #  define __THREAD__ ((unsigned)((pid_t)syscall(SYS_gettid)))
@@ -233,14 +223,19 @@ inline pid_t GetCurrentThreadId() { uint64_t tid64; pthread_threadid_np(NULL, &t
 // Type defines
 
 #ifndef _MSC_VER
-typedef int32_t				HRESULT;
-
 typedef unsigned char		BYTE;
 typedef unsigned short		WORD;
 typedef unsigned int		DWORD;
 typedef uint64_t	        QWORD;
 
 typedef char				CHAR;
+typedef int                 BOOL;
+typedef signed int			INT;
+typedef unsigned int		UINT;
+typedef long				LONG;
+
+typedef int32_t				HRESULT;
+
 typedef CHAR*				LPSTR;
 typedef const CHAR*			LPCSTR;
 typedef CHAR				TCHAR;
@@ -266,6 +261,19 @@ int _vscprintf(LPCSTR format, va_list pargs);
 
 #define _T(s)               s
 #endif //_MSC_VER
+
+// signed and unsigned types of the size of the architecture
+// (32 or 64 bit for x86 and respectively x64)
+#ifdef _ENVIRONMENT64
+typedef int64_t             int_t;
+typedef uint64_t            uint_t;
+#else
+typedef int32_t             int_t;
+typedef uint32_t            uint_t;
+#endif
+
+// type used for the size of the files
+typedef int64_t     		size_f_t;
 
 #define DECLARE_NO_INDEX(...) std::numeric_limits<__VA_ARGS__>::max()
 #define NO_ID				DECLARE_NO_INDEX(uint32_t)
@@ -297,6 +305,13 @@ int _vscprintf(LPCSTR format, va_list pargs);
 #define NULL				0
 #endif
 
+#ifndef FALSE
+#define FALSE				0
+#endif
+#ifndef TRUE
+#define TRUE				1
+#endif
+
 #ifdef max
 #undef max
 #endif
@@ -305,33 +320,11 @@ int _vscprintf(LPCSTR format, va_list pargs);
 #endif
 
 #ifndef MINF
-#define MINF                std::min
+#define MINF			(std::min)
 #endif
 #ifndef MAXF
-#define MAXF                std::max
+#define MAXF			(std::max)
 #endif
-
-namespace SEACAVE {
-
-// signed and unsigned types of the size of the architecture
-// (32 or 64 bit for x86 and respectively x64)
-#ifdef _ENVIRONMENT64
-typedef int64_t             int_t;
-typedef uint64_t            uint_t;
-#else
-typedef int32_t             int_t;
-typedef uint32_t            uint_t;
-#endif
-
-// type used for the size of the files
-typedef int64_t     	    size_f_t;
-
-// type used as the default floating number precision
-typedef double              REAL;
-
-template <typename TYPE, typename REALTYPE=REAL>
-struct RealType { typedef typename std::conditional<std::is_floating_point<TYPE>::value, TYPE, REALTYPE>::type type; };
-
 template<typename T>
 inline T MINF3(const T& x1, const T& x2, const T& x3) {
 	return MINF(MINF(x1, x2), x3);
@@ -342,27 +335,10 @@ inline T MAXF3(const T& x1, const T& x2, const T& x3) {
 }
 
 #ifndef RAND
-#define RAND			std::rand
+#define RAND			::rand
 #endif
 template<typename T>
-FORCEINLINE T RANDOM() { return T(RAND())/RAND_MAX; }
-
-template<typename T1, typename T2>
-union TAliasCast
-{
-	T1 f;
-	T2 i;
-	inline TAliasCast() {}
-	inline TAliasCast(T1 v) : f(v) {}
-	inline TAliasCast(T2 v) : i(v) {}
-	inline TAliasCast& operator = (T1 v) { f = v; return *this; }
-	inline TAliasCast& operator = (T2 v) { i = v; return *this; }
-	inline operator T1 () const { return f; }
-};
-typedef TAliasCast<float,int32_t> CastF2I;
-typedef TAliasCast<double,int32_t> CastD2I;
-
-} // namespace SEACAVE
+FORCEINLINE T RANDOM() { return (T(1)/RAND_MAX)*RAND(); }
 
 #if defined(_MSC_VER)
 # define __LITTLE_ENDIAN 0
@@ -380,9 +356,9 @@ typedef TAliasCast<double,int32_t> CastD2I;
 
 #include "Strings.h"
 #include "AutoPtr.h"
-#include "List.h"
 #include "Thread.h"
 #include "SharedPtr.h"
+#include "List.h"
 #include "Queue.h"
 #include "Hash.h"
 #include "Timer.h"
@@ -392,8 +368,24 @@ typedef TAliasCast<double,int32_t> CastD2I;
 #include "File.h"
 #include "MemFile.h"
 #include "LinkLib.h"
+#include "HalfFloat.h"
 
 namespace SEACAVE {
+
+// maximum number of vertices in one list
+#define MAXNUMVERTS				65535
+// maximum number of indices in one list
+#define MAXNUMINDIS				(MAXNUMVERTS*8)
+typedef WORD					INDEX;
+// maximum number of bone indices in one list
+#define MAXNUMBONES				255
+typedef BYTE					BONEIDX;
+// maximum number of frames in one animation
+#define MAXNUMFRAMES			65535
+typedef WORD					FRAMEIDX;
+
+typedef class GENERAL_API cList<INDEX, INDEX, 0>		CINDEXArray;
+typedef class GENERAL_API cList<UINT, UINT, 0>			CUINTArray;
 
 typedef class GENERAL_API CSharedPtr<File>				FilePtr;
 
@@ -572,7 +564,6 @@ typedef class GENERAL_API cList<double, double, 0>      DoubleArr;
 #define FZERO_TOLERANCE	0.0001f
 #define FINV_ZERO		1000000.f
 
-#define GCLASS			unsigned
 #define FRONT			0
 #define BACK			1
 #define PLANAR			2
@@ -589,16 +580,15 @@ typedef class GENERAL_API cList<double, double, 0>      DoubleArr;
 #define CEIL2INT		SEACAVE::Ceil2Int
 #define ROUND			SEACAVE::Round2Int
 #define ROUND2INT		SEACAVE::Round2Int
-#define SIN				std::sin
-#define ASIN			std::asin
-#define COS				std::cos
-#define ACOS			std::acos
-#define TAN				std::tan
-#define ATAN			std::atan
-#define ATAN2			std::atan2
-#define POW				std::pow
-#define POWI			SEACAVE::powi
-#define LOG2I			SEACAVE::log2i
+#define SIN				sinf
+#define ASIN			asinf
+#define COS				cosf
+#define ACOS			acosf
+#define TAN				tanf
+#define ATAN			atanf
+#define ATAN2			atan2f
+#define POW				powf
+#define POWI			powi
 
 
 namespace SEACAVE {
@@ -606,25 +596,15 @@ namespace SEACAVE {
 // F U N C T I O N S ///////////////////////////////////////////////
 
 template<typename T>
-struct MakeIdentity { using type = T; };
-template<typename T>
-using MakeSigned = typename std::conditional<std::is_integral<T>::value,std::make_signed<T>,SEACAVE::MakeIdentity<T>>::type;
-
-template<typename T1, typename T2>
-constexpr T1 Cast(const T2& v) {
-	return static_cast<T1>(v);
-}
-
-template<typename T>
-constexpr T& NEGATE(T& a) {
+inline T& NEGATE(T& a) {
 	return (a = -a);
 }
 template<typename T>
-constexpr T SQUARE(const T& a) {
+inline T SQUARE(const T& a) {
 	return (a * a);
 }
 template<typename T>
-constexpr T CUBE(const T& a) {
+inline T CUBE(const T& a) {
 	return (a * a * a);
 }
 template<typename T>
@@ -644,7 +624,7 @@ inline T LOG10(const T& a) {
 	return T(log10(a));
 }
 template<typename T>
-constexpr T powi(T base, int exp) {
+inline T powi(T base, int exp) {
 	T result(1);
 	while (exp) {
 		if (exp & 1)
@@ -654,7 +634,7 @@ constexpr T powi(T base, int exp) {
 	}
 	return result;
 }
-constexpr int log2i(int val) {
+inline int log2i(int val) {
 	int ret = -1;
 	while (val > 0) {
 		val >>= 1;
@@ -672,14 +652,14 @@ inline T arithmeticSeries(T n, T a1=1, T d=1) {
 	return (n*(a1*2+(n-1)*d))/2;
 }
 template<typename T>
-constexpr T factorial(T n) {
+inline T factorial(T n) {
 	T ret = 1;
 	while (n > 1)
 		ret *= n--;
 	return ret;
 }
 template<typename T>
-constexpr T combinations(const T& n, const T& k) {
+inline T combinations(const T& n, const T& k) {
 	ASSERT(n >= k);
 	#if 1
 	T num = n;
@@ -691,24 +671,6 @@ constexpr T combinations(const T& n, const T& k) {
 	#else
 	return factorial(n) / (factorial(k)*factorial(n-k));
 	#endif
-}
-
-// adapted from https://github.com/whackashoe/fastapprox.git
-// (set bSafe to true if the values might be smaller than -126)
-template<bool bSafe>
-inline float FPOW2(float p) {
-	if (bSafe && p < -126.f) {
-		return 0.f;
-	} else {
-		ASSERT(p >= -126.f);
-		CastF2I v;
-		v.i = static_cast<int32_t>((1 << 23) * (p + 126.94269504f));
-		return v.f;
-	}
-}
-template<bool bSafe>
-inline float FEXP(float v) {
-	return FPOW2<bSafe>(1.44269504f * v);
 }
 
 // Inverse of the square root
@@ -762,22 +724,24 @@ inline T TANH(const T& x) {
 // cube root approximation using bit hack for 32-bit float (5 decimals)
 // (exploits the properties of IEEE 754 floating point numbers
 // by leveraging the fact that their binary representation is close to a log2 representation)
-inline float cbrt5(float x) {
-	#if 0
-	CastF2I c(x);
-	c.i = ((c.i-(127<<23))/3+(127<<23));
+inline float cbrt5(float f) {
+	#if 1
+	(int&)f = (((int&)f-(127<<23))/3+(127<<23));
 	#else
-	TAliasCast<float,uint32_t> c(x);
-	c.i = c.i/3 + 709921077u;
+	unsigned* p = (unsigned*)&f;
+	*p = *p/3 + 709921077;
 	#endif
-	return c.f;
+	return f;
 }
 // cube root approximation using bit hack for 64-bit float
 // adapted from Kahan's cbrt (5 decimals)
-inline double cbrt5(double x) {
-	TAliasCast<double,uint32_t[2]> c(0.0), d(x);
-	c.i[1] = d.i[1]/3 + 715094163u;
-	return c.f;
+inline double cbrt5(double d) {
+	const unsigned B1 = 715094163;
+	double t = 0.0;
+	unsigned* pt = (unsigned*)&t;
+	unsigned* px = (unsigned*)&d;
+	pt[1]=px[1]/3+B1;
+	return t;
 }
 // iterative cube root approximation using Halley's method
 // faster convergence than Newton's method: (R/(a*a)+a*2)/3
@@ -805,92 +769,16 @@ FORCEINLINE float CBRT(float x) {
 	#ifdef _FAST_CBRT
 	return fast_cbrt<float,1>(x);
 	#else
-	return POW(x, 1.0f/3.0f);
+	return pow(x, 1.0f/3.0f);
 	#endif
 }
 FORCEINLINE double CBRT(const double& x) {
 	#ifdef _FAST_CBRT
 	return fast_cbrt<double,2>(x);
 	#else
-	return POW(x, 1.0/3.0);
+	return pow(x, 1.0/3.0);
 	#endif
 }
-/*----------------------------------------------------------------*/
-
-
-#if defined(__GNUC__)
-
-FORCEINLINE int PopCnt(uint32_t bb) {
-	return __builtin_popcount(bb);
-}
-FORCEINLINE int PopCnt(uint64_t bb) {
-	return __builtin_popcountll(bb);
-}
-FORCEINLINE int PopCnt15(uint64_t bb) {
-	return __builtin_popcountll(bb);
-}
-FORCEINLINE int PopCntSparse(uint64_t bb) {
-	return __builtin_popcountll(bb);
-}
-
-#elif defined(_USE_SSE) && defined(_M_AMD64) // 64 bit windows
-
-FORCEINLINE int PopCnt(uint32_t bb) {
-	return (int)_mm_popcnt_u32(bb);
-}
-FORCEINLINE int PopCnt(uint64_t bb) {
-	return (int)_mm_popcnt_u64(bb);
-}
-FORCEINLINE int PopCnt15(uint64_t bb) {
-	return (int)_mm_popcnt_u64(bb);
-}
-FORCEINLINE int PopCntSparse(uint64_t bb) {
-	return (int)_mm_popcnt_u64(bb);
-}
-
-#else
-
-// general purpose population count
-template<typename T>
-constexpr int PopCnt(T bb)
-{
-	STATIC_ASSERT(std::is_integral<T>::value && std::is_unsigned<T>::value);
-	return std::bitset<sizeof(T)*8>(bb).count();
-}
-template<>
-inline int PopCnt(uint64_t bb) {
-	const uint64_t k1 = (uint64_t)0x5555555555555555;
-	const uint64_t k2 = (uint64_t)0x3333333333333333;
-	const uint64_t k3 = (uint64_t)0x0F0F0F0F0F0F0F0F;
-	const uint64_t k4 = (uint64_t)0x0101010101010101;
-	bb -= (bb >> 1) & k1;
-	bb = (bb & k2) + ((bb >> 2) & k2);
-	bb = (bb + (bb >> 4)) & k3;
-	return (bb * k4) >> 56;
-}
-// faster version assuming not more than 15 bits set, used in mobility
-// eval, posted on CCC forum by Marco Costalba of Stockfish team
-inline int PopCnt15(uint64_t bb) {
-	unsigned w = unsigned(bb >> 32), v = unsigned(bb);
-	v -= (v >> 1) & 0x55555555; // 0-2 in 2 bits
-	w -= (w >> 1) & 0x55555555;
-	v = ((v >> 2) & 0x33333333) + (v & 0x33333333); // 0-4 in 4 bits
-	w = ((w >> 2) & 0x33333333) + (w & 0x33333333);
-	v += w; // 0-8 in 4 bits
-	v *= 0x11111111;
-	return int(v >> 28);
-}
-// version faster on sparsely populated bitboards
-inline int PopCntSparse(uint64_t bb) {
-	int count = 0;
-	while (bb) {
-		count++;
-		bb &= bb - 1;
-	}
-	return count;
-}
-
-#endif
 /*----------------------------------------------------------------*/
 
 
@@ -901,9 +789,20 @@ const double _float2int_doublemagic         = 6755399441055744.0; //2^52 * 1.5, 
 const double _float2int_doublemagicdelta    = (1.5e-8);
 const double _float2int_doublemagicroundeps = (.5f-_float2int_doublemagicdelta); //almost .5f = .5f - 1e^(number of exp bit)
 FORCEINLINE int CRound2Int(const double& x) {
-	const CastD2I c(x + _float2int_doublemagic);
+	#if 1
+	union CastD2I {
+		double  d;
+		int32_t i;
+	};
+	CastD2I c;
+	c.d = x + _float2int_doublemagic;
 	ASSERT(int32_t(floor(x+.5)) == c.i);
 	return c.i;
+	#else
+	x = x + _float2int_doublemagic;
+	ASSERT(int32_t(floor(x+.5)) == ((int32_t*)&x)[0]);
+	return ((int32_t*)&x)[0];
+	#endif
 }
 #endif
 FORCEINLINE int Floor2Int(float x) {
@@ -947,6 +846,66 @@ FORCEINLINE int Round2Int(double x) {
 	#else
 	return int(floor(x+.5));
 	#endif
+}
+/*----------------------------------------------------------------*/
+
+
+// Random number generation
+// uniform random number generation
+FORCEINLINE float random() {
+	return RANDOM<float>();
+}
+FORCEINLINE double randomd() {
+	return RANDOM<double>();
+}
+template<typename T>
+FORCEINLINE T randomRange(T nMin, T nMax) {
+	return nMin + ((nMax - nMin) * RAND())/RAND_MAX;
+}
+template<>
+FORCEINLINE float randomRange<float>(float fMin, float fMax) {
+	return fMin + (fMax - fMin) * random();
+}
+template<>
+FORCEINLINE double randomRange<double>(double fMin, double fMax) {
+	return fMin + (fMax - fMin) * randomd();
+}
+template<typename T>
+FORCEINLINE T randomMeanRange(T mean, T delta/*=(max-min)/2*/) {
+	return mean-delta + (delta*T(2) * RAND())/RAND_MAX;
+}
+template<>
+FORCEINLINE float randomMeanRange<float>(float mean, float delta/*=(max-min)/2*/) {
+	return mean + delta * (2.f * random() - 1.f);
+}
+template<>
+FORCEINLINE double randomMeanRange<double>(double mean, double delta/*=(max-min)/2*/) {
+	return mean + delta * (2.0 * randomd() - 1.0);
+}
+// gaussian random number generation
+template<typename T>
+FORCEINLINE T gaussian(T val, T sigma) {
+	return EXP(-SQUARE(val/sigma)/2)/(SQRT(T(M_PI*2))*sigma);
+}
+template<typename T>
+FORCEINLINE T randomGaussian(T mean, T sigma) {
+	T x, y, r2;
+	do {
+		x = T(-1) + T(2) * RANDOM<T>();
+		y = T(-1) + T(2) * RANDOM<T>();
+		r2 = x * x + y * y;
+	} while (r2 > T(1) || r2 == T(0));
+	return mean + sigma * y * SQRT(T(-2) * LOGN(r2) / r2);
+}
+template<typename T>
+FORCEINLINE T randomGaussian(T sigma) {
+	return randomGaussian(T(0), sigma);
+}
+FORCEINLINE float randomGaussian() {
+	return randomGaussian(0.f, 1.f);
+}
+FORCEINLINE double randomGaussiand() {
+	return randomGaussian(0.0, 1.0);
 }
 /*----------------------------------------------------------------*/
 
@@ -1169,6 +1128,75 @@ inline void sse_prefetch(const void* p) {_mm_prefetch((const char*)p, _MM_HINT_N
 
 // C L A S S E S ///////////////////////////////////////////////////
 
+#define FLOOR_FIX	68719476736.0 * 1.5
+#define BIAS		(ForI((int)(((23 + 127) << 23) + (1 << 22))))
+class GENERAL_API Float
+{
+public:
+	struct GENERAL_API ForI
+	{
+		union
+		{
+			float	f;
+			int		i;
+		};
+
+		inline ForI() {}
+		inline explicit ForI(float val)	: f(val) {}
+		inline explicit ForI(int val)	: i(val) {}
+	} v;
+
+	//---------------------------------------
+
+	static const Float  ZERO;   // ( 0)
+	static const Float  ONE;    // ( 1)
+	static const Float nONE;    // (-1)
+	static const Float  INFINIT;// ( 1.#INF)
+	static const Float nINFINIT;// (-1.#INF)
+
+	//---------------------------------------
+
+	inline Float() {}
+	inline Float(float f) : v(f) {}
+
+	inline float	Abs() const						{ return ForI(v.i & 0x7FFFFFFF).f; }
+	inline float	Clamp(float l, float h) const	{ return (v.f < l) ? l : ((v.f > h) ? h : v.f); }
+	inline bool		IsZero() const					{ return Abs() < FZERO_TOLERANCE; }
+	inline bool		IsEqual(float f) const			{ return Float(f - v.f).Abs() < FZERO_TOLERANCE; }
+	inline bool		IsNegative() const				{ return (v.i & 0x80000000) != 0; }
+	inline bool		IsPositive() const				{ return (v.i & 0x80000000) == 0; }
+
+	//TODO: these functions give wrong result on some machines/compilation settings
+	inline int		Floor2Int() const				{ const double d((double)v.f + FLOOR_FIX); return (*(int*)&d) >> 16; }
+	inline float	Floor() const					{ return (float)Floor2Int(); }
+
+	inline int		Ceil2Int() const				{ const double d((double)v.f + 1.0 + FLOOR_FIX); return (*(int*)&d) >> 16; }
+	inline float	Ceil() const					{ return (float)Ceil2Int(); }
+
+	inline int		Round2Int() const				{ return ForI(v.f + BIAS.f).i - BIAS.i; }
+	inline float	Round() const					{ return (float)Round2Int(); }
+
+	inline float	Fract() const					{ return v.f - Floor(); }
+
+	inline float	Sqrt() const					{ return sqrtf(v.f); }
+	inline float	InvSqrt() const					{ return RSQRT(v.f); }
+
+	inline			operator float() const			{ return v.f; }
+	inline void		operator+=(float r)				{ v.f += r; }
+	inline void		operator-=(float r)				{ v.f -= r; }
+	inline void		operator*=(float r)				{ v.f *= r; }
+	inline void		operator/=(float r)				{ v.f /= r; }
+	inline void		operator =(float r)				{ v.f = r; }
+	inline bool		operator==(float r)				{ return v.f == r; }
+	inline bool		operator!=(float r)				{ return v.f != r; }
+	inline bool		operator <(float r)				{ return v.f < r; }
+	inline bool		operator >(float r)				{ return v.f > r; }
+};
+#undef FLOOR_FIX
+#undef BIAS
+/*----------------------------------------------------------------*/
+
+
 inline bool   ISINFORNAN(float x)			{ return (std::isinf(x) || std::isnan(x)); }
 inline bool   ISINFORNAN(double x)			{ return (std::isinf(x) || std::isnan(x)); }
 inline bool   ISFINITE(float x)				{ return (!std::isinf(x) && !std::isnan(x)); }
@@ -1187,8 +1215,10 @@ inline _Tp    CLAMPS(_Tp v, _Tp c0, _Tp c1)	{ if (c0 <= c1) return CLAMP(v, c0, 
 template<typename _Tp>
 inline _Tp    SIGN(_Tp x)					{ if (x > _Tp(0)) return _Tp(1); if (x < _Tp(0)) return _Tp(-1); return _Tp(0); }
 
+inline float  ABS(float  x)					{ return Float(x).Abs(); }
+inline double ABS(double x)					{ return fabs(x); }
 template<typename _Tp>
-inline _Tp    ABS(_Tp    x)					{ return std::abs(x); }
+inline _Tp    ABS(_Tp    x)					{ return x < _Tp(0) ? -x : x; }
 
 template<typename _Tp>
 inline _Tp    ZEROTOLERANCE()				{ return _Tp(0); }
@@ -1204,10 +1234,10 @@ inline float  EPSILONTOLERANCE()			{ return 0.00001f; }
 template<>
 inline double EPSILONTOLERANCE()			{ return 1e-10; }
 
-inline bool   ISZERO(float  x)				{ return ABS(x) < FZERO_TOLERANCE; }
+inline bool   ISZERO(float  x)				{ return Float(x).IsZero(); }
 inline bool   ISZERO(double x)				{ return ABS(x) < ZERO_TOLERANCE; }
 
-inline bool   ISEQUAL(float  x, float  v)	{ return ABS(x-v) < FZERO_TOLERANCE; }
+inline bool   ISEQUAL(float  x, float  v)	{ return Float(x).IsEqual(v); }
 inline bool   ISEQUAL(double x, double v)	{ return ABS(x-v) < ZERO_TOLERANCE; }
 
 inline float  INVZERO(float)				{ return FINV_ZERO; }
@@ -1222,16 +1252,10 @@ template<typename _Tp>
 inline _Tp    SAFEDIVIDE(_Tp   x, _Tp   y)	{ return (y==_Tp(0) ? INVZERO(y) : x/y); }
 /*----------------------------------------------------------------*/
 
-} // namespace SEACAVE
-
-
-#include "Random.h"
-#include "HalfFloat.h"
-
-
-namespace SEACAVE {
 
 // P R O T O T Y P E S /////////////////////////////////////////////
+
+typedef double REAL;
 
 template <typename TYPE, int m, int n> class TMatrix;
 template <typename TYPE, int DIMS> class TAABB;
@@ -1440,7 +1464,6 @@ public:
 	#endif
 
 	using Base::val;
-	using Base::channels;
 
 	enum { elems = m*n };
 
@@ -1457,37 +1480,6 @@ public:
 	#ifdef _USE_EIGEN
 	inline TMatrix(const EMat& rhs) { operator EMat& () = rhs; }
 	#endif
-
-	TMatrix(TYPE v0); //!< 1x1 matrix
-	TMatrix(TYPE v0, TYPE v1); //!< 1x2 or 2x1 matrix
-	TMatrix(TYPE v0, TYPE v1, TYPE v2); //!< 1x3 or 3x1 matrix
-	TMatrix(TYPE v0, TYPE v1, TYPE v2, TYPE v3); //!< 1x4, 2x2 or 4x1 matrix
-	TMatrix(TYPE v0, TYPE v1, TYPE v2, TYPE v3, TYPE v4); //!< 1x5 or 5x1 matrix
-	TMatrix(TYPE v0, TYPE v1, TYPE v2, TYPE v3, TYPE v4, TYPE v5); //!< 1x6, 2x3, 3x2 or 6x1 matrix
-	TMatrix(TYPE v0, TYPE v1, TYPE v2, TYPE v3, TYPE v4, TYPE v5, TYPE v6); //!< 1x7 or 7x1 matrix
-	TMatrix(TYPE v0, TYPE v1, TYPE v2, TYPE v3, TYPE v4, TYPE v5, TYPE v6, TYPE v7); //!< 1x8, 2x4, 4x2 or 8x1 matrix
-	TMatrix(TYPE v0, TYPE v1, TYPE v2, TYPE v3, TYPE v4, TYPE v5, TYPE v6, TYPE v7, TYPE v8); //!< 1x9, 3x3 or 9x1 matrix
-	TMatrix(TYPE v0, TYPE v1, TYPE v2, TYPE v3, TYPE v4, TYPE v5, TYPE v6, TYPE v7, TYPE v8, TYPE v9); //!< 1x10, 2x5 or 5x2 or 10x1 matrix
-	TMatrix(TYPE v0, TYPE v1, TYPE v2, TYPE v3,
-		TYPE v4, TYPE v5, TYPE v6, TYPE v7,
-		TYPE v8, TYPE v9, TYPE v10, TYPE v11); //!< 1x12, 2x6, 3x4, 4x3, 6x2 or 12x1 matrix
-	TMatrix(TYPE v0, TYPE v1, TYPE v2, TYPE v3,
-		TYPE v4, TYPE v5, TYPE v6, TYPE v7,
-		TYPE v8, TYPE v9, TYPE v10, TYPE v11,
-		TYPE v12, TYPE v13); //!< 1x14, 2x7, 7x2 or 14x1 matrix
-	TMatrix(TYPE v0, TYPE v1, TYPE v2, TYPE v3,
-		TYPE v4, TYPE v5, TYPE v6, TYPE v7,
-		TYPE v8, TYPE v9, TYPE v10, TYPE v11,
-		TYPE v12, TYPE v13, TYPE v14, TYPE v15); //!< 1x16, 4x4 or 16x1 matrix
-	explicit TMatrix(const TYPE* vals); //!< initialize from a plain array
-
-	TMatrix(const TMatrix<TYPE,m,n>& a, const TMatrix<TYPE,m,n>& b, cv::Matx_AddOp) : Base(a, b, cv::Matx_AddOp()) {}
-	TMatrix(const TMatrix<TYPE,m,n>& a, const TMatrix<TYPE,m,n>& b, cv::Matx_SubOp) : Base(a, b, cv::Matx_SubOp()) {}
-	template<typename TYPE2> TMatrix(const TMatrix<TYPE,m,n>& a, TYPE2 alpha, cv::Matx_ScaleOp) : Base(a, alpha, cv::Matx_ScaleOp()) {}
-	TMatrix(const TMatrix<TYPE,m,n>& a, const TMatrix<TYPE,m,n>& b, cv::Matx_MulOp) : Base(a, b, cv::Matx_MulOp()) {}
-	TMatrix(const TMatrix<TYPE,m,n>& a, const TMatrix<TYPE,m,n>& b, cv::Matx_DivOp) : Base(a, b, cv::Matx_DivOp()) {}
-	template<int l> TMatrix(const TMatrix<TYPE,m,l>& a, const TMatrix<TYPE,l,n>& b, cv::Matx_MatMulOp) : Base(a, b, cv::Matx_MatMulOp()) {}
-	TMatrix(const TMatrix<TYPE,n,m>& a, cv::Matx_TOp) : Base(a, cv::Matx_TOp()) {}
 
 	template <typename T> inline TMatrix& operator = (const cv::Matx<T,m,n>& rhs) { Base::operator = (rhs); return *this; }
 	inline TMatrix& operator = (const cv::Mat& rhs) { Base::operator = (rhs); return *this; }
@@ -1604,12 +1596,8 @@ public:
 		return pt.width>=0 && pt.height>=0 && pt.width<Base::size().width && pt.height<Base::size().height;
 	}
 	template <typename T>
-	inline typename std::enable_if<std::is_integral<T>::value,bool>::type isInside(const cv::Point_<T>& pt) const {
-		return pt.x>=0 && pt.y>=0 && pt.x<Base::size().width && pt.y<Base::size().height;
-	}
-	template <typename T>
-	inline typename std::enable_if<std::is_floating_point<T>::value,bool>::type isInside(const cv::Point_<T>& pt) const {
-		return pt.x>=T(0) && pt.y>=T(0) && pt.x<=T(Base::size().width) && pt.y<=T(Base::size().height);
+	inline bool isInside(const cv::Point_<T>& pt) const {
+		return int(pt.x)>=0 && int(pt.y)>=0 && int(pt.x)<Base::size().width && int(pt.y)<Base::size().height;
 	}
 
 	/// Is this coordinate inside the 2D matrix, and not too close to the edges?
@@ -1618,20 +1606,12 @@ public:
 		return pt.width>=border && pt.height>=border && pt.width<Base::size().width-border && pt.height<Base::size().height-border;
 	}
 	template <typename T>
-	inline typename std::enable_if<std::is_integral<T>::value,bool>::type isInsideWithBorder(const cv::Point_<T>& pt, int border) const {
-		return pt.x>=border && pt.y>=border && pt.x<Base::size().width-border && pt.y<Base::size().height-border;
-	}
-	template <typename T>
-	inline typename std::enable_if<std::is_floating_point<T>::value,bool>::type isInsideWithBorder(const cv::Point_<T>& pt, int border) const {
-		return pt.x>=T(border) && pt.y>=T(border) && pt.x<=T(Base::size().width-(border+1)) && pt.y<=T(Base::size().height-(border+1));
+	inline bool isInsideWithBorder(const cv::Point_<T>& pt, int border) const {
+		return int(pt.x)>=border && int(pt.y)>=border && int(pt.x)<Base::size().width-border && int(pt.y)<Base::size().height-border;
 	}
 	template <typename T, int border>
-	inline typename std::enable_if<std::is_integral<T>::value,bool>::type isInsideWithBorder(const cv::Point_<T>& pt) const {
-		return pt.x>=border && pt.y>=border && pt.x<Base::size().width-border && pt.y<Base::size().height-border;
-	}
-	template <typename T, int border>
-	inline typename std::enable_if<std::is_floating_point<T>::value,bool>::type isInsideWithBorder(const cv::Point_<T>& pt) const {
-		return pt.x>=T(border) && pt.y>=T(border) && pt.x<=T(Base::size().width-(border+1)) && pt.y<=T(Base::size().height-(border+1));
+	inline bool isInsideWithBorder(const cv::Point_<T>& pt) const {
+		return int(pt.x)>=border && int(pt.y)>=border && int(pt.x)<Base::size().width-border && int(pt.y)<Base::size().height-border;
 	}
 
 	/// Remove the given element from the vector
@@ -1905,14 +1885,6 @@ struct TPixel {
 	inline void set(const ALT* clr) { c[0] = TYPE(clr[0]); c[1] = TYPE(clr[1]); c[2] = TYPE(clr[2]); }
 	inline void get(ALT& _r, ALT& _g, ALT& _b) const { _r = ALT(r); _g = ALT(g); _b = ALT(b); }
 	inline void get(ALT* clr) const { clr[0] = ALT(c[0]); clr[1] = ALT(c[1]); clr[2] = ALT(c[2]); }
-	template<typename T> inline TPixel<typename std::enable_if<!std::is_floating_point<TYPE>::value || !std::is_same<T,uint8_t>::value,T>::type> cast() const { return TPixel<T>(T(r), T(g), T(b)); }
-	template<typename T> inline TPixel<typename std::enable_if<std::is_floating_point<TYPE>::value && std::is_same<T,uint8_t>::value,T>::type> cast() const {
-		return TPixel<uint8_t>(
-			(uint8_t)CLAMP(ROUND2INT(r), 0, 255),
-			(uint8_t)CLAMP(ROUND2INT(g), 0, 255),
-			(uint8_t)CLAMP(ROUND2INT(b), 0, 255)
-		);
-	}
 	// set/get as vector
 	inline const TYPE& operator[](size_t i) const { ASSERT(i<3); return c[i]; }
 	inline TYPE& operator[](size_t i) { ASSERT(i<3); return c[i]; }
@@ -1940,10 +1912,6 @@ struct TPixel {
 	template<typename T> inline TPixel operator-(T v) const { return TPixel((TYPE)(r-v), (TYPE)(g-v), (TYPE)(b-v)); }
 	template<typename T> inline TPixel& operator-=(T v) { return (*this = operator-(v)); }
 	inline uint32_t toDWORD() const { return RGBA((uint8_t)r, (uint8_t)g, (uint8_t)b, (uint8_t)0); }
-	// tools
-	template <typename VT>
-	static TPixel colorRamp(VT v, VT vmin, VT vmax);
-	static TPixel gray2color(ALT v);
 	#ifdef _USE_BOOST
 	// serialize
 	template <class Archive>
@@ -2028,15 +1996,6 @@ struct TColor {
 	inline void set(const ALT* clr) { c[0] = TYPE(clr[0]); c[1] = TYPE(clr[1]); c[2] = TYPE(clr[2]); c[3] = TYPE(clr[3]); }
 	inline void get(ALT& _r, ALT& _g, ALT& _b, ALT& _a) const { _r = ALT(r); _g = ALT(g); _b = ALT(b); _a = ALT(a); }
 	inline void get(ALT* clr) const { clr[0] = ALT(c[0]); clr[1] = ALT(c[1]); clr[2] = ALT(c[2]); clr[3] = ALT(c[3]); }
-	template<typename T> inline TColor<typename std::enable_if<!std::is_floating_point<TYPE>::value || !std::is_same<T,uint8_t>::value,T>::type> cast() const { return TColor<T>(T(r), T(g), T(b), T(a)); }
-	template<typename T> inline TColor<typename std::enable_if<std::is_floating_point<TYPE>::value && std::is_same<T,uint8_t>::value,T>::type> cast() const {
-		return TColor<uint8_t>(
-			(uint8_t)CLAMP(ROUND2INT(r), 0, 255),
-			(uint8_t)CLAMP(ROUND2INT(g), 0, 255),
-			(uint8_t)CLAMP(ROUND2INT(b), 0, 255),
-			(uint8_t)CLAMP(ROUND2INT(a), 0, 255)
-		);
-	}
 	// set/get as vector
 	inline const TYPE& operator[](size_t i) const { ASSERT(i<4); return c[i]; }
 	inline TYPE& operator[](size_t i) { ASSERT(i<4); return c[i]; }
@@ -2130,25 +2089,23 @@ public:
 	template <typename T>
 	TYPE sampleSafe(const TPoint2<T>& pt) const;
 
-	template <typename T, typename TV, typename Functor>
-	bool sample(TV& v, const TPoint2<T>& pt, const Functor& functor) const;
-	template <typename T, typename TV, typename Functor>
-	bool sampleSafe(TV& v, const TPoint2<T>& pt, const Functor& functor) const;
-	template <typename T, typename Functor>
-	TYPE sample(const TPoint2<T>& pt, const Functor& functor, const TYPE& dv) const;
-	template <typename T, typename Functor>
-	TYPE sampleSafe(const TPoint2<T>& pt, const Functor& functor, const TYPE& dv) const;
+	template <typename T>
+	bool sample(TYPE& v, const TPoint2<T>& pt, bool (STCALL *fncCond)(const TYPE&)) const;
+	template <typename T>
+	bool sampleSafe(TYPE& v, const TPoint2<T>& pt, bool (STCALL *fncCond)(const TYPE&)) const;
+	template <typename T>
+	TYPE sample(const TPoint2<T>& pt, bool (STCALL *fncCond)(const TYPE&), const TYPE& dv) const;
+	template <typename T>
+	TYPE sampleSafe(const TPoint2<T>& pt, bool (STCALL *fncCond)(const TYPE&), const TYPE& dv) const;
 
 	template <typename SAMPLER, typename INTERTYPE>
 	INTERTYPE sample(const SAMPLER& sampler, const TPoint2<typename SAMPLER::Type>& pt) const;
 
 	template <typename T>
-	void toGray(TImage<T>& out, int code, bool bNormalize=false, bool bSRGB=false) const;
+	void toGray(TImage<T>& out, int code, bool bNormalize=false) const;
 
-	static cv::Size computeResize(const cv::Size& size, REAL scale);
-	static cv::Size computeResize(const cv::Size& size, REAL scale, unsigned resizes);
-	unsigned computeMaxResolution(unsigned& level, unsigned minImageSize=320, unsigned maxImageSize=INT_MAX) const;
-	static unsigned computeMaxResolution(unsigned width, unsigned height, unsigned& level, unsigned minImageSize=320, unsigned maxImageSize=INT_MAX);
+	unsigned computeMaxResolution(unsigned& level, unsigned minImageSize) const;
+	static unsigned computeMaxResolution(unsigned maxImageSize, unsigned& level, unsigned minImageSize);
 
 	template <typename T, typename PARSER>
 	static void RasterizeTriangle(const TPoint2<T>& v1, const TPoint2<T>& v2, const TPoint2<T>& v3, PARSER& parser);
@@ -2203,7 +2160,7 @@ public:
 	};
 
 	enum { numBitsPerCell = sizeof(Type)*8 };
-	enum { numBitsShift = LOG2I<TBitMatrix::numBitsPerCell>() };
+	enum { numBitsShift = log2i<TBitMatrix::numBitsPerCell>() };
 
 public:
 	inline TBitMatrix() : data(NULL) {}
@@ -2363,7 +2320,6 @@ struct TAccumulator {
 
 	inline TAccumulator() : value(0), weight(0) {}
 	inline TAccumulator(const Type& v, const WeightType& w) : value(v), weight(w) {}
-	inline bool IsEmpty() const { return weight <= 0; }
 	// adds the given weighted value to the internal value
 	inline void Add(const Type& v, const WeightType& w) {
 		value += v*w;

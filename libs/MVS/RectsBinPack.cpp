@@ -545,7 +545,7 @@ void GuillotineBinPack::Init(int width, int height)
 	binWidth = width;
 	binHeight = height;
 
-	#ifndef _RELEASE
+	#ifdef _DEBUG
 	disjointRects.Clear();
 	#endif
 
@@ -900,7 +900,7 @@ void GuillotineBinPack::SplitFreeRectAlongAxis(const Rect &freeRect, const Rect 
 
 void GuillotineBinPack::MergeFreeList()
 {
-	#ifndef _RELEASE
+	#ifdef _DEBUG
 	DisjointRectCollection test;
 	for (size_t i = 0; i < freeRectangles.size(); ++i)
 		ASSERT(test.Add(freeRectangles[i]) == true);
@@ -935,7 +935,7 @@ void GuillotineBinPack::MergeFreeList()
 			}
 		}
 
-	#ifndef _RELEASE
+	#ifdef _DEBUG
 	test.Clear();
 	for (size_t i = 0; i < freeRectangles.size(); ++i)
 		ASSERT(test.Add(freeRectangles[i]) == true);
@@ -966,7 +966,7 @@ void SkylineBinPack::Init(int width, int height, bool useWasteMap_)
 
 	useWasteMap = useWasteMap_;
 
-	#ifndef _RELEASE
+	#ifdef _DEBUG
 	disjointRects.Clear();
 	#endif
 
@@ -1051,7 +1051,7 @@ bool SkylineBinPack::Insert(RectArr& rects, LevelChoiceHeuristic method)
 		}
 
 		// Perform the actual packing.
-		#ifndef _RELEASE
+		#ifdef _DEBUG
 		ASSERT(disjointRects.Disjoint(bestNode));
 		disjointRects.Add(bestNode);
 		#endif
@@ -1080,7 +1080,7 @@ SkylineBinPack::Rect SkylineBinPack::Insert(int width, int height, LevelChoiceHe
 			newNode.width = node.width;
 			newNode.height = node.height;
 			usedSurfaceArea += width * height;
-			#ifndef _RELEASE
+			#ifdef _DEBUG
 			ASSERT(disjointRects.Disjoint(newNode));
 			disjointRects.Add(newNode);
 			#endif
@@ -1234,7 +1234,7 @@ SkylineBinPack::Rect SkylineBinPack::InsertBottomLeft(int width, int height)
 		AddSkylineLevel(bestIndex, newNode);
 
 		usedSurfaceArea += width * height;
-		#ifndef _RELEASE
+		#ifdef _DEBUG
 		disjointRects.Add(newNode);
 		#endif
 	}
@@ -1294,7 +1294,7 @@ SkylineBinPack::Rect SkylineBinPack::InsertMinWaste(int width, int height)
 		AddSkylineLevel(bestIndex, newNode);
 
 		usedSurfaceArea += width * height;
-		#ifndef _RELEASE
+		#ifdef _DEBUG
 		disjointRects.Add(newNode);
 		#endif
 	}

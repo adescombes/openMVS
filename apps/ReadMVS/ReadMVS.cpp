@@ -1,5 +1,5 @@
 /*
- * Viewer.cpp
+ * DensifyPointCloud.cpp
  *
  * Copyright (c) 2014-2015 SEACAVE
  *
@@ -29,17 +29,16 @@
  *      containing it.
  */
 
-#include "Common.h"
+#include "../../libs/MVS/Common.h"
+#include "../../libs/MVS/Scene.h"
 #include <boost/program_options.hpp>
 
-#include "Scene.h"
-
-using namespace VIEWER;
+using namespace MVS;
 
 
 // D E F I N E S ///////////////////////////////////////////////////
 
-#define APPNAME _T("Viewer")
+#define APPNAME _T("ReadMVS")
 
 
 // S T R U C T S ///////////////////////////////////////////////////
@@ -47,17 +46,12 @@ using namespace VIEWER;
 namespace OPT {
 String strInputFileName;
 String strOutputFileName;
-String strMeshFileName;
-bool bLosslessTexture;
+//String strMeshFileName;
+String strDenseConfigFileName;
 unsigned nArchiveType;
 int nProcessPriority;
 unsigned nMaxThreads;
-unsigned nMaxMemory;
-String strExportType;
 String strConfigFileName;
-#if TD_VERBOSE != TD_VERBOSE_OFF
-bool bLogFile;
-#endif
 boost::program_options::variables_map vm;
 } // namespace OPT
 
@@ -73,14 +67,13 @@ bool Initialize(size_t argc, LPCTSTR* argv)
 	generic.add_options()
 		("help,h", "produce this help message")
 		("working-folder,w", boost::program_options::value<std::string>(&WORKING_FOLDER), "working directory (default current directory)")
-		("config-file,c", boost::program_options::value<std::string>(&OPT::strConfigFileName)->default_value(APPNAME _T(".cfg")), "file name containing program options")
-		("export-type", boost::program_options::value<std::string>(&OPT::strExportType), "file type used to export the 3D scene (ply or obj)")
+		//("config-file,c", boost::program_options::value<std::string>(&OPT::strConfigFileName)->default_value(APPNAME _T(".cfg")), "file name containing program options")
 		("archive-type", boost::program_options::value<unsigned>(&OPT::nArchiveType)->default_value(2), "project archive type: 0-text, 1-binary, 2-compressed binary")
-		("process-priority", boost::program_options::value<int>(&OPT::nProcessPriority)->default_value(0), "process priority (normal by default)")
-		("max-threads", boost::program_options::value<unsigned>(&OPT::nMaxThreads)->default_value(0), "maximum number of threads that this process should use (0 - use all available cores)")
-		("max-memory", boost::program_options::value<unsigned>(&OPT::nMaxMemory)->default_value(0), "maximum amount of memory in MB that this process should use (0 - use all available memory)")
+// brigitte
+        ("archive-type", boost::program_options::value<unsigned>(&OPT::nArchiveType)->default_value(0), "project archive type: 0-text, 1-binary, 2-compressed binary")
+		("process-priority", boost::program_options::value<int>(&OPT::nProcessPriority)->default_value(-1), "process priority (below normal by default)")
+		("max-threads", boost::program_options::value<unsigned>(&OPT::nMaxThreads)->default_value(0), "maximum number of threads (0 for using all available cores)")
 		#if TD_VERBOSE != TD_VERBOSE_OFF
-		("log-file", boost::program_options::value<bool>(&OPT::bLogFile)->default_value(false), "dump log to a file")
 		("verbosity,v", boost::program_options::value<int>(&g_nVerbosityLevel)->default_value(
 			#if TD_VERBOSE == TD_VERBOSE_DEBUG
 			3
@@ -92,18 +85,30 @@ bool Initialize(size_t argc, LPCTSTR* argv)
 		;
 
 	// group of options allowed both on command line and in config file
-	boost::program_options::options_description config("Viewer options");
+//	unsigned nResolutionLevel;
+//	unsigned nMinResolution;
+	unsigned nNumViews;
+//	unsigned nMinViewsFuse;
+//	unsigned nEstimateColors;
+//	unsigned nEstimateNormals;
+	boost::program_options::options_description config("Export options");
 	config.add_options()
-		("input-file,i", boost::program_options::value<std::string>(&OPT::strInputFileName), "input project filename containing camera poses and scene (point-cloud/mesh)")
-		("output-file,o", boost::program_options::value<std::string>(&OPT::strOutputFileName), "output filename for storing the mesh")
-		("texture-lossless", boost::program_options::value<bool>(&OPT::bLosslessTexture)->default_value(false), "export texture using a lossless image format")
+		("input-file,i", boost::program_options::value<std::string>(&OPT::strInputFileName), "input filename containing camera poses and image list")
+		("output-file,o", boost::program_options::value<std::string>(&OPT::strOutputFileName), "output filename for storing the dense point-cloud")
+//		("resolution-level", boost::program_options::value<unsigned>(&nResolutionLevel)->default_value(1), "how many times to scale down the images before point cloud computation")
+//		("min-resolution", boost::program_options::value<unsigned>(&nMinResolution)->default_value(640), "do not scale images lower than this resolution")
+//		("number-views", boost::program_options::value<unsigned>(&nNumViews)->default_value(4), "number of views used for depth-map estimation (0 - all neighbor views available)")
+//		("number-views-fuse", boost::program_options::value<unsigned>(&nMinViewsFuse)->default_value(3), "minimum number of images that agrees with an estimate during fusion in order to consider it inlier")
+//		("estimate-colors", boost::program_options::value<unsigned>(&nEstimateColors)->default_value(1), "estimate the colors for the dense point-cloud")
+//		("estimate-normals", boost::program_options::value<unsigned>(&nEstimateNormals)->default_value(0), "estimate the normals for the dense point-cloud")
 		;
+        
 
 	// hidden options, allowed both on command line and
 	// in config file, but will not be shown to the user
 	boost::program_options::options_description hidden("Hidden options");
 	hidden.add_options()
-		("mesh-file", boost::program_options::value<std::string>(&OPT::strMeshFileName), "mesh file name to texture (overwrite the existing mesh)")
+		("dense-config-file", boost::program_options::value<std::string>(&OPT::strDenseConfigFileName), "optional configuration file for the densifier (overwritten by the command line options)")
 		;
 
 	boost::program_options::options_description cmdline_options;
@@ -120,23 +125,15 @@ bool Initialize(size_t argc, LPCTSTR* argv)
 		boost::program_options::store(boost::program_options::command_line_parser((int)argc, argv).options(cmdline_options).positional(p).run(), OPT::vm);
 		boost::program_options::notify(OPT::vm);
 		INIT_WORKING_FOLDER;
-		// parse configuration file
-		std::ifstream ifs(MAKE_PATH_SAFE(OPT::strConfigFileName));
-		if (ifs) {
-			boost::program_options::store(parse_config_file(ifs, config_file_options), OPT::vm);
-			boost::program_options::notify(OPT::vm);
-		}
 	}
 	catch (const std::exception& e) {
 		LOG(e.what());
 		return false;
 	}
+    
 
-	#if TD_VERBOSE != TD_VERBOSE_OFF
 	// initialize the log file
-	if (OPT::bLogFile)
-		OPEN_LOGFILE((MAKE_PATH(APPNAME _T("-")+Util::getUniqueName(0)+_T(".log"))).c_str());
-	#endif
+	OPEN_LOGFILE(MAKE_PATH(APPNAME _T("-")+Util::getUniqueName(0)+_T(".log")).c_str());
 
 	// print application details: version and command line
 	Util::LogBuild();
@@ -144,32 +141,35 @@ bool Initialize(size_t argc, LPCTSTR* argv)
 
 	// validate input
 	Util::ensureValidPath(OPT::strInputFileName);
-	if (OPT::vm.count("help")) {
+	Util::ensureUnifySlash(OPT::strInputFileName);
+    
+	if (OPT::vm.count("help") || OPT::strInputFileName.IsEmpty()) {
 		boost::program_options::options_description visible("Available options");
 		visible.add(generic).add(config);
-		GET_LOG() << _T("\n"
-			"Visualize any know point-cloud/mesh formats or MVS projects. Supply files through command line or Drag&Drop.\n"
-			"Keys:\n"
-			"\tE: export scene\n"
-			"\tR: reset scene\n"
-			"\tC: render cameras\n"
-			"\tLeft/Right: select next camera to view the scene\n"
-			"\tW: render wire-frame mesh\n"
-			"\tT: render mesh texture\n"
-			"\tUp/Down: adjust point size\n"
-			"\tUp/Down + Shift: adjust minimum number of views accepted when displaying a point or line\n"
-			"\t+/-: adjust camera thumbnail transparency\n"
-			"\t+/- + Shift: adjust camera cones' length\n"
-			"\n")
-			<< visible;
+		GET_LOG() << visible;
 	}
-	if (!OPT::strExportType.IsEmpty())
-		OPT::strExportType = OPT::strExportType.ToLower() == _T("obj") ? _T(".obj") : _T(".ply");
+	if (OPT::strInputFileName.IsEmpty())
+		return false;
 
 	// initialize optional options
 	Util::ensureValidPath(OPT::strOutputFileName);
-	Util::ensureValidPath(OPT::strMeshFileName);
+	Util::ensureUnifySlash(OPT::strOutputFileName);
+	if (OPT::strOutputFileName.IsEmpty())
+		OPT::strOutputFileName = Util::getFullFileName(OPT::strInputFileName) + _T(".bin");
 
+	/* init dense options
+	OPTDENSE::init();
+	const bool bValidConfig(OPTDENSE::oConfig.Load(OPT::strDenseConfigFileName));
+	OPTDENSE::update();
+//	OPTDENSE::nResolutionLevel = nResolutionLevel;
+//	OPTDENSE::nMinResolution = nMinResolution;
+	OPTDENSE::nNumViews = nNumViews;
+//	OPTDENSE::nMinViewsFuse = nMinViewsFuse;
+//	OPTDENSE::nEstimateColors = nEstimateColors;
+//	OPTDENSE::nEstimateNormals = nEstimateNormals;
+	if (!bValidConfig)
+		OPTDENSE::oConfig.Save(OPT::strDenseConfigFileName);
+*/
 	// initialize global options
 	Process::setCurrentProcessPriority((Process::Priority)OPT::nProcessPriority);
 	#ifdef _USE_OPENMP
@@ -182,7 +182,6 @@ bool Initialize(size_t argc, LPCTSTR* argv)
 	MiniDumper::Create(APPNAME, WORKING_FOLDER);
 	#endif
 
-	Util::Init();
 	return true;
 }
 
@@ -194,36 +193,45 @@ void Finalize()
 	Util::LogMemoryInfo();
 	#endif
 
-	if (OPT::bLogFile)
-		CLOSE_LOGFILE();
+	CLOSE_LOGFILE();
 	CLOSE_LOGCONSOLE();
 	CLOSE_LOG();
 }
 
 int main(int argc, LPCTSTR* argv)
 {
+
 	#ifdef _DEBUGINFO
 	// set _crtBreakAlloc index to stop in <dbgheap.c> at allocation
 	_CrtSetDbgFlag(_CRTDBG_ALLOC_MEM_DF | _CRTDBG_LEAK_CHECK_DF);// | _CRTDBG_CHECK_ALWAYS_DF);
 	#endif
 
+
 	if (!Initialize(argc, argv))
 		return EXIT_FAILURE;
-
-	// create viewer
-	Scene viewer;
-	if (!viewer.Init(1280, 720, APPNAME,
-			OPT::strInputFileName.IsEmpty() ? NULL : MAKE_PATH_SAFE(OPT::strInputFileName).c_str(),
-			OPT::strMeshFileName.IsEmpty() ? NULL : MAKE_PATH_SAFE(OPT::strMeshFileName).c_str()))
+    
+	Scene scene(OPT::nMaxThreads);
+	// load and estimate a dense point-cloud
+	if (!scene.Load(MAKE_PATH_SAFE(OPT::strInputFileName)))
 		return EXIT_FAILURE;
-	if (viewer.IsOpen() && !OPT::strOutputFileName.IsEmpty()) {
-		// export the scene
-		viewer.Export(MAKE_PATH_SAFE(OPT::strOutputFileName), OPT::strExportType.IsEmpty()?LPCTSTR(NULL):OPT::strExportType.c_str(), OPT::bLosslessTexture);
+	if (scene.pointcloud.IsEmpty()) {
+		VERBOSE("error: empty initial point-cloud");
+		return EXIT_FAILURE;
 	}
-	// enter viewer loop
-	viewer.Loop();
+    
+
+    /*
+	TD_TIMER_START();
+	if (!scene.DenseReconstruction())
+		return EXIT_FAILURE;
+	VERBOSE("Densifying point-cloud completed: %u points (%s)", scene.pointcloud.points.GetSize(), TD_TIMER_GET_FMT().c_str());
+*/
+	// save the final mesh
+	const String baseFileName(MAKE_PATH_SAFE(Util::getFullFileName(OPT::strOutputFileName)));
+    scene.Export(baseFileName+_T(".bin"));
 
 	Finalize();
 	return EXIT_SUCCESS;
 }
 /*----------------------------------------------------------------*/
+

@@ -602,7 +602,6 @@ int main(int argc, LPCTSTR* argv)
 			const String srcImage(MAKE_PATH_FULL(WORKING_FOLDER_FULL, pathRoot+image.name));
 			image.name = MAKE_PATH_FULL(WORKING_FOLDER_FULL, OPT::strOutputImageFolder+image.name);
 			Util::ensureDirectory(image.name);
-			image.ID = static_cast<MVS::IIndex>(view.first);
 			image.platformID = map_intrinsic.at(view.second->id_intrinsic);
 			MVS::Platform& platform = scene.platforms[image.platformID];
 			image.cameraID = 0;
@@ -689,7 +688,6 @@ int main(int argc, LPCTSTR* argv)
 			image.name = imageBAF.name;
 			Util::ensureUnifySlash(image.name);
 			image.name = MAKE_PATH_FULL(WORKING_FOLDER_FULL, image.name);
-			image.ID = imageBAF.id_camera;
 			image.platformID = imageBAF.id_camera;
 			MVS::Platform& platform = scene.platforms[image.platformID];
 			image.cameraID = 0;

@@ -44,7 +44,7 @@ public:
 	inline void Enlarge(TYPE);
 	inline void EnlargePercent(TYPE);
 
-	inline GCLASS Classify(const POINT&) const;
+	inline UINT Classify(const POINT&) const;
 }; // class TSphere
 /*----------------------------------------------------------------*/
 

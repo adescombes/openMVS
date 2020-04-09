@@ -1,8 +1,3 @@
-// OpenMVS version
-#define OpenMVS_MAJOR_VERSION ${OpenMVS_MAJOR_VERSION}
-#define OpenMVS_MINOR_VERSION ${OpenMVS_MINOR_VERSION}
-#define OpenMVS_PATCH_VERSION ${OpenMVS_PATCH_VERSION}
-
 // OpenMVS compiled as static or dynamic libs
 #cmakedefine BUILD_SHARED_LIBS
 
@@ -27,9 +22,6 @@
 // Eigen Matrix & Linear Algebra Library
 #cmakedefine _USE_EIGEN
 
-// CERES optimization library
-#cmakedefine _USE_CERES
-
 // JPEG codec
 #cmakedefine _USE_JPG
 
@@ -38,6 +30,9 @@
 
 // TIFF codec
 #cmakedefine _USE_TIFF
+
+// EXIV2 parser
+#cmakedefine _USE_EXIV2
 
 // OpenGL support
 #cmakedefine _USE_OPENGL

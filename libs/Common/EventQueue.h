@@ -31,7 +31,7 @@ public:
 
 	uint32_t GetID() const { return id; }
 
-	virtual bool Run(void* /*pArgs*/ = NULL) { return true; }
+	virtual bool Run(void* /*pArgs*/) { return true; }
 
 protected:
 	const uint32_t id;
@@ -68,20 +68,6 @@ protected:
 	Semaphore m_sem;
 	mutable CriticalSection m_cs;
 	EVENTQUEUE m_events;
-};
-/*----------------------------------------------------------------*/
-
-
-// basic event and thread pool
-class GENERAL_API EventThreadPool : public ThreadPool, public EventQueue
-{
-public:
-	inline EventThreadPool() {}
-	inline EventThreadPool(size_type nThreads) : ThreadPool(nThreads) {}
-	inline EventThreadPool(size_type nThreads, Thread::FncStart pfnStarter, void* pData=NULL) : ThreadPool(nThreads, pfnStarter, pData) {}
-	inline ~EventThreadPool() {}
-
-	void stop(); //stop threads, reset locks state and empty event queue
 };
 /*----------------------------------------------------------------*/
 

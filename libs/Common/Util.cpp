@@ -38,7 +38,7 @@ typedef struct CPUINFO_TYP {
 	bool bSSE41;      // Streaming SIMD Extensions 4.1
 	bool bSSE42;      // Streaming SIMD Extensions 4.2
 	bool bAVX;        // Advanced Vector Extensions
-	bool bFMA;        // Fused Multiplyï¿½Add
+	bool bFMA;        // Fused Multiply–Add
 	bool b3DNOW;      // 3DNow! (vendor independent)
 	bool b3DNOWEX;    // 3DNow! (AMD specific extensions)
 	bool bMMX;        // MMX support
@@ -173,7 +173,7 @@ static const uint64_t gs_au64CRC64[256] =
 
 // F U N C T I O N S ///////////////////////////////////////////////
 
-String Util::getHomeFolder()
+String Util::getHomeDirectory()
 {
 	#ifdef _MSC_VER
 	TCHAR homedir[MAX_PATH];
@@ -188,7 +188,7 @@ String Util::getHomeFolder()
 	return ensureUnifySlash(dir);
 }
 
-String Util::getApplicationFolder()
+String Util::getAppplicationsDirectory()
 {
 	#ifdef _MSC_VER
 	TCHAR appdir[MAX_PATH];
@@ -204,7 +204,7 @@ String Util::getApplicationFolder()
 	return ensureUnifySlash(dir);
 }
 
-String Util::getCurrentFolder()
+String Util::getCurrentDirectory()
 {
 	TCHAR pathname[MAX_PATH+1];
 	#ifdef _MSC_VER
@@ -433,25 +433,6 @@ String Util::GetOSInfo()
 /*----------------------------------------------------------------*/
 
 
-// Initialize various global variables (ex: random-number-generator state).
-void Util::Init()
-{
-	#ifdef _RELEASE
-	const time_t t(Util::getTime());
-	std::srand((unsigned)t);
-	#if CV_MAJOR_VERSION > 3 || (CV_MAJOR_VERSION == 3 && CV_MINOR_VERSION >= 4)
-	cv::setRNGSeed((int)t);
-	#endif
-	#else
-	std::srand((unsigned)0);
-	#if CV_MAJOR_VERSION > 3 || (CV_MAJOR_VERSION == 3 && CV_MINOR_VERSION >= 4)
-	cv::setRNGSeed((int)0);
-	#endif
-	#endif
-}
-/*----------------------------------------------------------------*/
-
-
 /**
  * Set global variable for availability of SSE instructions.
  */
@@ -575,7 +556,7 @@ bool OSSupportsAVX()
 {
 	#ifndef _WIN64
 	// try AVX instruction
-	unsigned flag;
+	UINT flag;
 	_asm {
 		mov ecx, 0; //specify 0 for XFEATURE_ENABLED_MASK register
 		XGETBV; //result in EDX:EAX
@@ -635,7 +616,7 @@ void Util::LogBuild()
 	#else
 	LOG(_T("Build date: ") __DATE__ _T(", ") __TIME__);
 	#endif
-	LOG(_T("CPU: %s (%u cores)"), Util::GetCPUInfo().c_str(), Thread::hardwareConcurrency());
+	LOG((_T("CPU: ") + Util::GetCPUInfo()).c_str());
 	LOG((_T("RAM: ") + Util::GetRAMInfo()).c_str());
 	LOG((_T("OS: ") + Util::GetOSInfo()).c_str());
 	if (!SIMD_ENABLED.isSet(Util::SSE)) LOG(_T("warning: no SSE compatible CPU or OS detected"));

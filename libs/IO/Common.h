@@ -36,6 +36,9 @@
 #ifdef _USE_TIFF
 #define _IMAGE_TIFF		// add TIFF support
 #endif
+#ifdef _USE_EXIV2
+#define _IMAGE_EXIF		// complete EXIF info support based on Exiv2
+#endif
 
 #include "ImageSCI.h"
 #ifdef _IMAGE_BMP
@@ -56,8 +59,13 @@
 #ifdef _IMAGE_TIFF
 #include "ImageTIFF.h"
 #endif
+#ifdef _IMAGE_EXIF
+#include "ImageEXIF.h"
+#endif
+#include "EXIF.h"
 #include "PLY.h"
 #include "OBJ.h"
+#include "TinyXML2.h"
 /*----------------------------------------------------------------*/
 
 #endif // __IO_COMMON_H__

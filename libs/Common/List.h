@@ -20,24 +20,28 @@
 
 // cList index type
 #ifdef _SUPPORT_CPP11
-#define ARR2IDX(arr) typename std::remove_reference<decltype(arr)>::type::size_type
+#ifdef _MSC_VER
+#define ARR2IDX(arr) std::remove_reference<decltype(arr)>::type::IDX
+#else
+#define ARR2IDX(arr) typename std::remove_reference<decltype(arr)>::type::IDX
+#endif
 #else
 #define ARR2IDX(arr) IDX
 #endif
 
 // cList iterator by index
 #ifndef FOREACH
-#define FOREACH(var, arr) for (ARR2IDX(arr) var=0, var##Size=(arr).size(); var<var##Size; ++var)
+#define FOREACH(var, arr) for (ARR2IDX(arr) var=0, var##Size=(arr).GetSize(); var<var##Size; ++var)
 #endif
 #ifndef RFOREACH
-#define RFOREACH(var, arr) for (ARR2IDX(arr) var=(arr).size(); var-->0; )
+#define RFOREACH(var, arr) for (ARR2IDX(arr) var=(arr).GetSize(); var-->0; )
 #endif
 // cList iterator by pointer
 #ifndef FOREACHPTR
-#define FOREACHPTR(var, arr) for (auto var=(arr).begin(), var##End=(arr).end(); var!=var##End; ++var)
+#define FOREACHPTR(var, arr) for (auto var=(arr).Begin(), var##End=(arr).End(); var!=var##End; ++var)
 #endif
 #ifndef RFOREACHPTR
-#define RFOREACHPTR(var, arr) for (auto var=(arr).end(), var##Begin=(arr).begin(); var--!=var##Begin; )
+#define RFOREACHPTR(var, arr) for (auto var=(arr).End(), var##Begin=(arr).Begin(); var--!=var##Begin; )
 #endif
 
 // raw data array iterator by index
@@ -65,10 +69,8 @@
 #endif
 
 #define CLISTDEF0(TYPE) SEACAVE::cList< TYPE, const TYPE&, 0 >
-#define CLISTDEF2(TYPE) SEACAVE::cList< TYPE, const TYPE&, 2 >
-#define CLISTDEF0IDX(TYPE,IDXTYPE) SEACAVE::cList< TYPE, const TYPE&, 0, 16, IDXTYPE >
 #define CLISTDEFIDX(TYPE,IDXTYPE) SEACAVE::cList< TYPE, const TYPE&, 1, 16, IDXTYPE >
-#define CLISTDEF2IDX(TYPE,IDXTYPE) SEACAVE::cList< TYPE, const TYPE&, 2, 16, IDXTYPE >
+#define CLISTDEF0IDX(TYPE,IDXTYPE) SEACAVE::cList< TYPE, const TYPE&, 0, 16, IDXTYPE >
 
 
 namespace SEACAVE {
@@ -106,6 +108,7 @@ public:
 	typedef ARG_TYPE ArgType;
 	typedef IDX_TYPE IDX;
 	typedef int (STCALL *TFncCompare)(const void* elem, const void* key); //returns 0 if equal, otherwise <0 or >0 respectively
+	typedef bool (STCALL *TFncCompareBool)(ARG_TYPE elem, ARG_TYPE key); //returns true if the two elements are strict in weak ordering
 
 	// construct an empty list
 	inline cList() : _size(0), _vectorSize(0), _vector(NULL)
@@ -618,97 +621,40 @@ public:
 		return GetNth(_size >> 1);
 	}
 
-	inline TYPE		GetMean()
-	{
-		return std::accumulate(Begin(), End(), TYPE(0)) / _size;
-	}
-
-	inline ArgType	GetMax() const {
-		return *std::max_element(Begin(), End());
-	}
-	template <typename Functor>
-	inline ArgType	GetMax(const Functor& functor) const {
-		return *std::max_element(Begin(), End(), functor);
-	}
-	inline IDX	GetMaxIdx() const {
-		return static_cast<IDX>(std::max_element(Begin(), End()) - Begin());
-	}
-	template <typename Functor>
-	inline IDX	GetMaxIdx(const Functor& functor) const {
-		return static_cast<IDX>(std::max_element(Begin(), End(), functor) - Begin());
-	}
-	#ifdef _SUPPORT_CPP11
-	inline std::pair<ArgType,ArgType>	GetMinMax() const {
-		const auto minmax(std::minmax_element(Begin(), End()));
-		return std::pair<ArgType,ArgType>(*minmax.first, *minmax.second);
-	}
-	template <typename Functor>
-	inline std::pair<ArgType,ArgType>	GetMinMax(const Functor& functor) const {
-		const auto minmax(std::minmax_element(Begin(), End(), functor));
-		return std::pair<ArgType,ArgType>(*minmax.first, *minmax.second);
-	}
-	inline std::pair<IDX,IDX>	GetMinMaxIdx() const {
-		const auto minmax(std::minmax_element(Begin(), End()));
-		return std::make_pair(static_cast<IDX>(minmax.first-Begin()), static_cast<IDX>(minmax.second-Begin()));
-	}
-	template <typename Functor>
-	inline std::pair<IDX,IDX>	GetMinMaxIdx(const Functor& functor) const {
-		const auto minmax(std::minmax_element(Begin(), End(), functor));
-		return std::make_pair(static_cast<IDX>(minmax.first-Begin()), static_cast<IDX>(minmax.second-Begin()));
-	}
-	#endif
-
-	inline TYPE&	PartialSort(IDX index)
-	{
-		TYPE* const nth(Begin()+index);
-		std::partial_sort(Begin(), nth, End());
-		return *nth;
-	}
-
 	inline void		Sort()
 	{
 		std::sort(Begin(), End());
 	}
-	template <typename Functor>
-	inline void		Sort(const Functor& functor)
+	inline void		Sort(TFncCompareBool xCompare)
 	{
-		std::sort(Begin(), End(), functor);
+		std::sort(Begin(), End(), xCompare);
 	}
 
 	inline	bool	IsSorted() const
 	{
-		#ifdef _SUPPORT_CPP11
-		return std::is_sorted(Begin(), End());
-		#else
 		if (_size < 2)
 			return true;
 		IDX i = _size-1;
 		do {
 			ARG_TYPE elem1 = _vector[i];
 			ARG_TYPE elem0 = _vector[--i];
-			if (elem1 < elem0)
+			if (!(elem0 < elem1 || elem0 == elem1))
 				return false;
 		} while (i > 0);
 		return true;
-		#endif
 	}
-	template <typename Functor>
-	inline bool		IsSorted(const Functor& functor) const
+	inline	bool	IsSorted(TFncCompareBool xCompare) const
 	{
-		#ifdef _SUPPORT_CPP11
-		return std::is_sorted(Begin(), End(), functor);
-		#else
 		if (_size < 2)
 			return true;
 		IDX i = _size-1;
 		do {
 			ARG_TYPE elem1 = _vector[i];
 			ARG_TYPE elem0 = _vector[--i];
-			if (functor(elem1, elem0))
+			if (!xCompare(elem0, elem1))
 				return false;
 		} while (i > 0);
 		return true;
-		#endif
 	}
 
 	inline std::pair<IDX,bool>	InsertSortUnique(ARG_TYPE elem)
@@ -1321,46 +1267,33 @@ protected:
 	TYPE*	_vector;
 
 public:
-	enum : IDX { NO_INDEX = DECLARE_NO_INDEX(IDX) };
+	static const IDX NO_INDEX;
 
 #if _USE_VECTORINTERFACE != 0
 public:
-	typedef IDX size_type;
 	typedef Type value_type;
 	typedef value_type* iterator;
 	typedef const value_type* const_iterator;
-	typedef value_type& reference;
-	typedef const value_type& const_reference;
 	typedef std::vector<Type> VectorType;
 	inline cList(const VectorType& rList) { CopyOf(&rList[0], rList.size()); }
-	#ifdef _SUPPORT_CPP11
-	inline cList(std::initializer_list<Type> l) : _size(0), _vectorSize((size_type)l.size()), _vector(NULL) { ASSERT(l.size()<NO_INDEX); if (_vectorSize == 0) return; _vector = (Type*) operator new[] (_vectorSize*sizeof(Type)); const Type* first(l.begin()); do new(_vector + _size++) Type(*first++); while (first!=l.end()); }
-	#endif
 	inline bool empty() const { return IsEmpty(); }
-	inline size_type size() const { return GetSize(); }
-	inline size_type capacity() const { return GetCapacity(); }
+	inline IDX size() const { return GetSize(); }
+	inline IDX capacity() const { return GetCapacity(); }
 	inline void clear() { Empty(); }
-	inline void insert(const_iterator it, const_reference elem) { InsertAt(it-this->_vector, elem); }
-	#ifdef _SUPPORT_CPP11
-	template <typename... Args>
-	inline reference emplace_back(Args&&... args) { return AddConstruct(std::forward<Args>(args)...); }
-	inline void push_back(value_type&& elem) { AddConstruct(elem); }
-	#endif
-	inline void push_back(const_reference elem) { Insert(elem); }
+	inline void insert(Type* it, ArgType elem) { InsertAt(it-this->_vector, elem); }
+	inline void push_back(ArgType elem) { Insert(elem); }
 	inline void pop_back() { RemoveLast(); }
-	inline void reserve(size_type newSize) { Reserve(newSize); }
-	inline void resize(size_type newSize) { Resize(newSize); }
-	inline void erase(const_iterator it) { RemoveAtMove(it-this->_vector); }
-	inline const_iterator cdata() const { return GetData(); }
-	inline const_iterator cbegin() const { return Begin(); }
-	inline const_iterator cend() const { return End(); }
-	inline iterator data() const { return GetData(); }
-	inline iterator begin() const { return Begin(); }
-	inline iterator end() const { return End(); }
+	inline void reserve(IDX newSize) { Reserve(newSize); }
+	inline void resize(IDX newSize) { Resize(newSize); }
+	inline void erase(Type* it) { RemoveAtMove(it-this->_vector); }
+	inline const Type* cdata() const { return GetData(); }
+	inline const Type* cbegin() const { return Begin(); }
+	inline const Type* cend() const { return End(); }
+	inline Type* data() const { return GetData(); }
+	inline Type* begin() const { return Begin(); }
+	inline Type* end() const { return End(); }
 	inline ArgType front() const { return First(); }
 	inline ArgType back() const { return Last(); }
-	inline reference front() { return First(); }
-	inline reference back() { return Last(); }
 	inline void swap(cList& rList) { Swap(rList); }
 #endif
 
@@ -1383,6 +1316,9 @@ protected:
 	BOOST_SERIALIZATION_SPLIT_MEMBER()
 #endif
 };
+template <typename TYPE, typename ARG_TYPE, int useConstruct, int grow, typename IDX_TYPE>
+const typename cList<TYPE,ARG_TYPE,useConstruct,grow,IDX_TYPE>::IDX
+cList<TYPE,ARG_TYPE,useConstruct,grow,IDX_TYPE>::NO_INDEX(DECLARE_NO_INDEX(IDX));
 /*----------------------------------------------------------------*/
 
 template <typename IDX_TYPE>
@@ -1395,6 +1331,7 @@ inline bool ValidIDX(const IDX_TYPE& idx) {
 // some test functions
 // run cListTest(99999);
 #if 0
+static bool SortIntTest(int a, int b) { return a<b; }
 inline bool cListTestIter(unsigned elems) {
 	std::vector<int> arrR;
 	cList<int, int, 0> arr0;
@@ -1410,7 +1347,7 @@ inline bool cListTestIter(unsigned elems) {
 		arrC.Insert(e);
 	}
 	std::sort(arrR.begin(), arrR.end());
-	arrC.Sort([](int a, int b) { return a<b; });
+	arrC.Sort(SortIntTest);
 	for (size_t i=0; i<arrR.size(); ++i) {
 		const int e = arrR[i];
 		if (arrC[i] != e ||

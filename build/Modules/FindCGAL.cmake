@@ -7,9 +7,9 @@
 #  CGAL_LIBS             - CGAL libraries
 #  CGAL_VERSION          - MAJOR.MINOR
 #----------------------------------------------------------
-
+ 
 set(CMAKE_ALLOW_LOOSE_LOOP_CONSTRUCTS true)
-
+ 
 if(NOT CGAL_DIR)
   # Get the system search path as a list.
   if(UNIX)
@@ -21,22 +21,21 @@ if(NOT CGAL_DIR)
   # Construct a set of paths relative to the system search path.
   set(CGAL_DIR_SEARCH "")
   foreach(dir ${CGAL_DIR_SEARCH2})
-    set(CGAL_DIR_SEARCH ${CGAL_DIR_SEARCH} ${dir}/../lib/CGAL)
+    set(CGAL_DIR_SEARCH ${CGAL_DIR_SEARCH} ${dir}/../lib/CGAL )
   endforeach()
-  set(CGAL_DIR_SEARCH ${CGAL_DIR_SEARCH} "lib" "lib64")
 
   #
   # Look for an installation or build tree.
   #
   find_path(CGAL_DIR "CGALConfig.cmake"
     # Look for an environment variable CGAL_DIR.
-    HINTS "${CGAL_ROOT}" "$ENV{CGAL_ROOT}" "$ENV{CGAL_DIR}" "$ENV{PROGRAMFILES}" "$ENV{PROGRAMW6432}"
+    HINTS "${CGAL_ROOT}" "$ENV{CGAL_ROOT}" "$ENV{CGAL_DIR}"
 
     # Look in places relative to the system executable search path.
     ${CGAL_DIR_SEARCH}
 
     # Look in standard UNIX install locations.
-    PATHS "/usr" "/usr/local" "/usr/share" "/usr/local/share" "/usr/lib/cmake" "/usr/local/lib/cmake" "/usr/include" "/usr/lib/x86_64-linux-gnu/cmake"
+    PATHS "$ENV{PROGRAMFILES}" "$ENV{PROGRAMW6432}" "/usr" "/usr/local" "/usr/share" "/usr/local/share" "/usr/lib/cmake" "/usr/local/lib/cmake" "/usr/include" "/usr/lib/x86_64-linux-gnu/cmake"
 
     # Read from the CMakeSetup registry entries.  It is likely that
     # CGAL will have been recently built.
@@ -51,7 +50,7 @@ if(NOT CGAL_DIR)
     [HKEY_CURRENT_USER\\Software\\Kitware\\CMakeSetup\\Settings\\StartPath;WhereBuild9]
     [HKEY_CURRENT_USER\\Software\\Kitware\\CMakeSetup\\Settings\\StartPath;WhereBuild10]
 	
-	PATH_SUFFIXES "CGAL" "share" "share/cgal" "share/cmake" "share/cmake/cgal"
+	PATH_SUFFIXES "CGAL"
 	
 	DOC "Root directory of CGAL library"
   )
@@ -64,16 +63,7 @@ set(CGAL_VERSION "")
 if(EXISTS "${CGAL_DIR}" AND NOT "${CGAL_DIR}" STREQUAL "")
 	if(EXISTS "${CGAL_DIR}/CGALConfig.cmake")
 		include("${CGAL_DIR}/CGALConfig.cmake")
-		set(CGAL_TARGET_LIBS "")
-		if(TARGET CGAL::CGAL)
-			get_target_property(CGAL_TARGET_LIBS CGAL::CGAL INTERFACE_LINK_LIBRARIES)
-		elseif(TARGET CGAL)
-			get_target_property(CGAL_TARGET_LIBS CGAL INTERFACE_LINK_LIBRARIES)
-		endif()
-		if(NOT CGAL_TARGET_LIBS)
-			set(CGAL_TARGET_LIBS "")
-		endif()
-		set(CGAL_LIBS ${CGAL_LIBS} ${CGAL_LIBRARIES} ${CGAL_LIBRARY} ${CGAL_TARGET_LIBS} ${CGAL_Core_LIBRARY} ${CGAL_ImageIO_LIBRARY} ${CGAL_3RD_PARTY_LIBRARIES} ${CGAL_Core_3RD_PARTY_LIBRARIES} ${CGAL_ImageIO_3RD_PARTY_LIBRARIES} ${MPFR_LIBRARIES} ${GMP_LIBRARIES} ${ZLIB_LIBRARIES})
+		set(CGAL_LIBS ${CGAL_LIBS} ${CGAL_LIBRARIES} ${CGAL_LIBRARY} ${CGAL_Core_LIBRARY} ${CGAL_ImageIO_LIBRARY} ${CGAL_3RD_PARTY_LIBRARIES} ${CGAL_Core_3RD_PARTY_LIBRARIES} ${CGAL_ImageIO_3RD_PARTY_LIBRARIES} ${MPFR_LIBRARIES} ${GMP_LIBRARIES} ${ZLIB_LIBRARIES})
 		set(CGAL_VERSION "${CGAL_MAJOR_VERSION}.${CGAL_MINOR_VERSION}")
 	else()
 		set(CGAL_INCLUDE_DIRS "${CGAL_DIR}/include" "${CGAL_DIR}/auxiliary/gmp/include")

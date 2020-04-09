@@ -120,12 +120,23 @@
 #endif // _MSC_VER
 
 
+#define DECLARE_TEMPLATE_INSTANCE(mod, typ, lptyp, ...) \
+	mod##_TPL template class mod##_API T##typ<__VA_ARGS__>; \
+	typedef class T##typ<__VA_ARGS__> typ; \
+	typedef typ *lptyp; \
+	typedef cList<lptyp, lptyp, 0> lptyp##ARR;
+
+
 #if !defined(_DEBUG) && !defined(_PROFILE)
-#define _RELEASE // exclude code useful only for debug
+#define _RELEASE			// exclude code useful only for debug
 #endif
 
 
 #if defined(_MSC_VER) && _MSC_VER >= 1400
+//disable the deprecated warnings for the CRT functions.
+//#ifndef _CRT_SECURE_CPP_OVERLOAD_STANDARD_NAMES
+//#define _CRT_SECURE_CPP_OVERLOAD_STANDARD_NAMES 1
+//#endif
 #ifndef _CRT_SECURE_NO_WARNINGS
 #define _CRT_SECURE_NO_WARNINGS 1
 #endif
@@ -137,12 +148,6 @@
 #endif
 #ifndef _CRT_NON_CONFORMING_SWPRINTFS
 #define _CRT_NON_CONFORMING_SWPRINTFS 1
-#endif
-#ifndef _CRT_SECURE_CPP_OVERLOAD_SECURE_NAMES
-#define _CRT_SECURE_CPP_OVERLOAD_SECURE_NAMES 0 // disable automatically overloading CPP names to secure versions
-#endif
-#if 0 && defined(_DEBUG) && !defined(_ITERATOR_DEBUG_LEVEL) // might not build if linking statically to 3rd party libraries
-#define _ITERATOR_DEBUG_LEVEL 1 // disable std iterator debugging even in Debug, as it is very slow
 #endif
 #endif
 
@@ -189,10 +194,6 @@
 #	define FORCEINLINE inline
 #endif
 
-#ifndef _SUPPORT_CPP11
-#	define constexpr inline
-#endif
-
 #define SAFE_DELETE(p)		{ if (p!=NULL) { delete (p);     (p)=NULL; } }
 #define SAFE_DELETE_ARR(p)	{ if (p!=NULL) { delete [] (p);  (p)=NULL; } }
 #define SAFE_FREE(p)		{ if (p!=NULL) { free(p);        (p)=NULL; } }
@@ -224,9 +225,9 @@
 #define ASSERT(exp)
 #else
 #ifdef _MSC_VER
-#define ASSERT(exp) {if (!(exp)) __debugbreak();}
+#define ASSERT(exp) {if (!(exp) && IDOK == MessageBox(NULL, SEACAVE::String::FormatString("Assertion rised in file %s line %d.\r\n\r\n%s", __FILE__, __LINE__, #exp).c_str(), "Assertion rised. Abort?", MB_OKCANCEL|MB_ICONEXCLAMATION|MB_DEFBUTTON1|MB_APPLMODAL)) exit(-1);}
 #else // _MSC_VER
-#define ASSERT(exp) {if (!(exp)) __builtin_trap();}
+#define ASSERT(exp)
 #endif // _MSC_VER
 #endif
 #define TRACE(...)
