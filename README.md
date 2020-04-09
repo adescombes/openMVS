@@ -1,4 +1,7 @@
-# OpenMVS: open Multi-View Stereo reconstruction library
+# ReadMVS : a tool for exporting dense point cloud data
+
+The goal of this work is to add a tool to the OpenMVS library (original description below) that enables storing, for each 3D point of a dense point cloud, the list of images that enabled computing the position of this point in the 3D space thanks to triangulation, and the confidence on the accuracy of this position.
+The data is read and extracted from one output of OpenMVS, the *sfm_data_dense.mvs* file which is written in a compressed binary format.  
 
 ## Introduction
 
