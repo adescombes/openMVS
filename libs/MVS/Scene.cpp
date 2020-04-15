@@ -294,44 +294,12 @@ bool Scene::Export(const String & fileName) const
             fs.write((const char*)&view.imageID, sizeof(uint32_t)); 
 			view.confidence = (pointcloud.pointWeights.IsEmpty() ? 0.f : pointcloud.pointWeights[i][v]);
             fs.write((const char*)&view.confidence, sizeof(uint32_t));
+            // reserve some bytes to write coordinates of x_proj, y_proj, label (all are uint32_t)
+            // const uint32_t nReserved[3] = {0.0, 0.0, 0};
+            // fs.write((const char*)&nReserved, sizeof(uint32_t)*3);
             
         });     
-    }
-/* // export the 6 first views, sorted by confidence
-	const int64_t nPoints((int64_t)pointcloud.points.GetSize());
-//	for (int64_t i=0; i<nPoints; ++i) {
-    for (int64_t i=0; i < 10; ++i){
-        
-        const PointCloud::Point& point = pointcloud.points[i];
-        const PointCloud::ViewArr& views = pointcloud.pointViews[i];
-
-//from SceneDensify.cpp at line 1441        
-
-        const PointCloud::WeightArr& weights = pointcloud.pointWeights[i];
-        ASSERT(!weights.IsEmpty());
-        uint32_t idxView(0);
-
-        float bestWeight = weights.First();
-        cout << "weights.First() : " << weights.First() << "\n";
-
-        cList<PointCloud::ViewArr::IDX> sortedWeights(0, weights.GetSize());
-        
-        while (!weights.IsEmpty()){
-            for (uint32_t idx=1; idx<weights.GetSize(); ++idx) {
-                const PointCloud::Weight& weight = weights[idx];
-                if (bestWeight < weight) {
-                    bestWeight = weight;
-                    idxView = idx;
-                    sortedWeights[idx] = weight;
-                    weights.RemoveAt(idx);
-                }
-            }
-        }
-
-    }    
-          */            
-
-
+    }         
     
     DEBUG_EXTRA("Scene exported (%s):\n"
         "\t%u images with a total of %u points\n",
