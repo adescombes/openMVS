@@ -294,9 +294,9 @@ bool Scene::Export(const String & fileName) const
             fs.write((const char*)&view.imageID, sizeof(uint32_t)); 
 			view.confidence = (pointcloud.pointWeights.IsEmpty() ? 0.f : pointcloud.pointWeights[i][v]);
             fs.write((const char*)&view.confidence, sizeof(uint32_t));
-            // reserve some bytes to write coordinates of x_proj, y_proj, label (all are uint32_t)
-            // const uint32_t nReserved[3] = {0.0, 0.0, 0};
-            // fs.write((const char*)&nReserved, sizeof(uint32_t)*3);
+            // reserve some bytes to write label 
+            const uint32_t nReserved = 0;
+            fs.write((const char*)&nReserved, sizeof(uint32_t));
             
         });     
     }         
