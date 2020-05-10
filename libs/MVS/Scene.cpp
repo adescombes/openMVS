@@ -272,7 +272,7 @@ bool Scene::Export(const String & fileName) const
     std::ofstream fs(fileName, std::ofstream::binary);
     if (!fs.is_open())
         return false;
-
+    
  // export all the views, sorted by index
     obj.vertices.resize(pointcloud.points.GetSize());
         FOREACH(i, pointcloud.points) {
@@ -291,7 +291,8 @@ bool Scene::Export(const String & fileName) const
         views.ForEach([&](PointCloud::ViewArr::IDX v) {
             MVS::Interface::Vertex::View& view = vertex.views[v]; // imageID + confidence
             view.imageID = views[v];
-            fs.write((const char*)&view.imageID, sizeof(uint32_t)); 
+            fs.write((const char*)&view.imageID, sizeof(uint32_t));
+            fs.write((const char*)&images[v].poseID, sizeof(uint32_t));            
 			view.confidence = (pointcloud.pointWeights.IsEmpty() ? 0.f : pointcloud.pointWeights[i][v]);
             fs.write((const char*)&view.confidence, sizeof(uint32_t));
             // reserve some bytes to write label 

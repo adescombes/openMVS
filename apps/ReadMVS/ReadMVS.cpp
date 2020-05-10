@@ -228,19 +228,19 @@ int main(int argc, LPCTSTR* argv)
 */
 	// save the final mesh
 	const String baseFileName(MAKE_PATH_SAFE(Util::getFullFileName(OPT::strOutputFileName)));
-    //scene.Export(baseFileName+_T(".txt"));
+    scene.Export(baseFileName+_T(".bin"));
     
     
-    std::vector<std::string> names;
+    /*std::vector<std::string> names;
 
 	for (size_t idx=0; idx<scene.images.size(); ++idx) {
 
         std::cout << "idx " << idx << "\n";
 
 		std::cout << "scene.images[idx].name " << scene.images[idx].name << "\n";
+        std::cout << "scene.images[idx].poseID " << scene.images[idx].poseID << "\n";
 
-
-    }
+    }*/
         
 	Finalize();
 	return EXIT_SUCCESS;
