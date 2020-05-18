@@ -32,7 +32,9 @@
 #include "../../libs/MVS/Common.h"
 #include "../../libs/MVS/Scene.h"
 #include <boost/program_options.hpp>
-
+#include <iostream>
+#include <fstream>
+using namespace std;
 using namespace MVS;
 
 
@@ -46,12 +48,9 @@ using namespace MVS;
 namespace OPT {
 String strInputFileName;
 String strOutputFileName;
-//String strMeshFileName;
-String strDenseConfigFileName;
 unsigned nArchiveType;
 int nProcessPriority;
 unsigned nMaxThreads;
-String strConfigFileName;
 boost::program_options::variables_map vm;
 } // namespace OPT
 
@@ -67,49 +66,21 @@ bool Initialize(size_t argc, LPCTSTR* argv)
 	generic.add_options()
 		("help,h", "produce this help message")
 		("working-folder,w", boost::program_options::value<std::string>(&WORKING_FOLDER), "working directory (default current directory)")
-		//("config-file,c", boost::program_options::value<std::string>(&OPT::strConfigFileName)->default_value(APPNAME _T(".cfg")), "file name containing program options")
 		("archive-type", boost::program_options::value<unsigned>(&OPT::nArchiveType)->default_value(2), "project archive type: 0-text, 1-binary, 2-compressed binary")
-// brigitte
-        ("archive-type", boost::program_options::value<unsigned>(&OPT::nArchiveType)->default_value(0), "project archive type: 0-text, 1-binary, 2-compressed binary")
 		("process-priority", boost::program_options::value<int>(&OPT::nProcessPriority)->default_value(-1), "process priority (below normal by default)")
 		("max-threads", boost::program_options::value<unsigned>(&OPT::nMaxThreads)->default_value(0), "maximum number of threads (0 for using all available cores)")
-		#if TD_VERBOSE != TD_VERBOSE_OFF
-		("verbosity,v", boost::program_options::value<int>(&g_nVerbosityLevel)->default_value(
-			#if TD_VERBOSE == TD_VERBOSE_DEBUG
-			3
-			#else
-			2
-			#endif
-			), "verbosity level")
-		#endif
 		;
 
 	// group of options allowed both on command line and in config file
-//	unsigned nResolutionLevel;
-//	unsigned nMinResolution;
-	unsigned nNumViews;
-//	unsigned nMinViewsFuse;
-//	unsigned nEstimateColors;
-//	unsigned nEstimateNormals;
 	boost::program_options::options_description config("Export options");
 	config.add_options()
 		("input-file,i", boost::program_options::value<std::string>(&OPT::strInputFileName), "input filename containing camera poses and image list")
 		("output-file,o", boost::program_options::value<std::string>(&OPT::strOutputFileName), "output filename for storing the dense point-cloud")
-//		("resolution-level", boost::program_options::value<unsigned>(&nResolutionLevel)->default_value(1), "how many times to scale down the images before point cloud computation")
-//		("min-resolution", boost::program_options::value<unsigned>(&nMinResolution)->default_value(640), "do not scale images lower than this resolution")
-//		("number-views", boost::program_options::value<unsigned>(&nNumViews)->default_value(4), "number of views used for depth-map estimation (0 - all neighbor views available)")
-//		("number-views-fuse", boost::program_options::value<unsigned>(&nMinViewsFuse)->default_value(3), "minimum number of images that agrees with an estimate during fusion in order to consider it inlier")
-//		("estimate-colors", boost::program_options::value<unsigned>(&nEstimateColors)->default_value(1), "estimate the colors for the dense point-cloud")
-//		("estimate-normals", boost::program_options::value<unsigned>(&nEstimateNormals)->default_value(0), "estimate the normals for the dense point-cloud")
 		;
-        
 
 	// hidden options, allowed both on command line and
 	// in config file, but will not be shown to the user
 	boost::program_options::options_description hidden("Hidden options");
-	hidden.add_options()
-		("dense-config-file", boost::program_options::value<std::string>(&OPT::strDenseConfigFileName), "optional configuration file for the densifier (overwritten by the command line options)")
-		;
 
 	boost::program_options::options_description cmdline_options;
 	cmdline_options.add(generic).add(config).add(hidden);
@@ -130,7 +101,6 @@ bool Initialize(size_t argc, LPCTSTR* argv)
 		LOG(e.what());
 		return false;
 	}
-    
 
 	// initialize the log file
 	OPEN_LOGFILE(MAKE_PATH(APPNAME _T("-")+Util::getUniqueName(0)+_T(".log")).c_str());
@@ -157,19 +127,6 @@ bool Initialize(size_t argc, LPCTSTR* argv)
 	if (OPT::strOutputFileName.IsEmpty())
 		OPT::strOutputFileName = Util::getFullFileName(OPT::strInputFileName) + _T(".bin");
 
-	/* init dense options
-	OPTDENSE::init();
-	const bool bValidConfig(OPTDENSE::oConfig.Load(OPT::strDenseConfigFileName));
-	OPTDENSE::update();
-//	OPTDENSE::nResolutionLevel = nResolutionLevel;
-//	OPTDENSE::nMinResolution = nMinResolution;
-	OPTDENSE::nNumViews = nNumViews;
-//	OPTDENSE::nMinViewsFuse = nMinViewsFuse;
-//	OPTDENSE::nEstimateColors = nEstimateColors;
-//	OPTDENSE::nEstimateNormals = nEstimateNormals;
-	if (!bValidConfig)
-		OPTDENSE::oConfig.Save(OPT::strDenseConfigFileName);
-*/
 	// initialize global options
 	Process::setCurrentProcessPriority((Process::Priority)OPT::nProcessPriority);
 	#ifdef _USE_OPENMP
@@ -218,29 +175,17 @@ int main(int argc, LPCTSTR* argv)
 		VERBOSE("error: empty initial point-cloud");
 		return EXIT_FAILURE;
 	}
-    
 
-    /*
-	TD_TIMER_START();
-	if (!scene.DenseReconstruction())
-		return EXIT_FAILURE;
-	VERBOSE("Densifying point-cloud completed: %u points (%s)", scene.pointcloud.points.GetSize(), TD_TIMER_GET_FMT().c_str());
-*/
-	// save the final mesh
 	const String baseFileName(MAKE_PATH_SAFE(Util::getFullFileName(OPT::strOutputFileName)));
     scene.Export(baseFileName+_T(".bin"));
     
-    
-    /*std::vector<std::string> names;
+    std::ofstream dict(baseFileName+_T("_dict.txt"), std::ofstream::out);
 
 	for (size_t idx=0; idx<scene.images.size(); ++idx) {
-
-        std::cout << "idx " << idx << "\n";
-
-		std::cout << "scene.images[idx].name " << scene.images[idx].name << "\n";
-        std::cout << "scene.images[idx].poseID " << scene.images[idx].poseID << "\n";
-
-    }*/
+        dict << idx << "\n";
+		dict << scene.images[idx].name << "\n";  
+    }
+    dict.close();      
         
 	Finalize();
 	return EXIT_SUCCESS;

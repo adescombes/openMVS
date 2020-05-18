@@ -253,14 +253,14 @@ bool Scene::SaveInterface(const String & fileName) const
 		}
 	}
 	// serialize out the current state
-/*	if (!ARCHIVE::SerializeSave(obj, fileName))
+	if (!ARCHIVE::SerializeSave(obj, fileName))
 		return false;
 	DEBUG_EXTRA("Scene saved to interface format (%s):\n"
 				"\t%u images (%u calibrated)\n"
 				"\t%u points, %u vertices, %u faces",
 				TD_TIMER_GET_FMT().c_str(),
 				images.GetSize(), nCalibratedImages,
-				pointcloud.points.GetSize(), mesh.vertices.GetSize(), mesh.faces.GetSize());*/            
+				pointcloud.points.GetSize(), mesh.vertices.GetSize(), mesh.faces.GetSize());            
 	return true;
 } // SaveInterface
 /*----------------------------------------------------------------*/
@@ -292,7 +292,6 @@ bool Scene::Export(const String & fileName) const
             MVS::Interface::Vertex::View& view = vertex.views[v]; // imageID + confidence
             view.imageID = views[v];
             fs.write((const char*)&view.imageID, sizeof(uint32_t));
-            fs.write((const char*)&images[v].poseID, sizeof(uint32_t));            
 			view.confidence = (pointcloud.pointWeights.IsEmpty() ? 0.f : pointcloud.pointWeights[i][v]);
             fs.write((const char*)&view.confidence, sizeof(uint32_t));
             // reserve some bytes to write label 
