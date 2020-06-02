@@ -13,3 +13,13 @@ with the following format characters:
 - view_id_k : int. Index of the view (image) 
 - confidence_k : float. Confidence with which the 3D point has been placed by view_id_k
 - 4 empty bytes are left after each ```[view_id_k][confidence_k]```
+
+#### Usage
+
+```
+./ReadMVS sfm_data_dense.mvs 
+```
+or 
+```
+./ReadMVS -i sfm_data_dense.mvs -o sfm_data_dense.bin
+```
